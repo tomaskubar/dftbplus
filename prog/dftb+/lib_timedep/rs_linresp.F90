@@ -13,7 +13,7 @@ module dftbp_rs_linearresponse
   use dftbp_shortgamma
   use dftbp_accuracy
   use dftbp_constants, only: Hartree__eV, au__Debye
-  use dftbp_nonscc, only: NonSccDiff
+  use dftbp_nonscc, only: TNonSccDiff
   use dftbp_scc, only: TScc
   use dftbp_blasroutines
   use dftbp_eigensolver
@@ -29,7 +29,7 @@ module dftbp_rs_linearresponse
   use dftbp_sk, only: rotateH0
   implicit none 
   private
-  !!^-- Check: once done, see which modules are actually required
+  ! ^-- Check: once done, see which modules are actually required
 
   public :: linRespCalcExcitationsRS
 
@@ -115,7 +115,7 @@ contains
     real(dp), intent(in) :: coords1(:), coords2(:)
     integer, intent(in) :: iSp1, iSp2
     type(TOrbitals), intent(in) :: orb
-    type(OSlakoCont), intent(in) :: skOverCont
+    type(TSlakoCont), intent(in) :: skOverCont
     real(dp), intent(out) :: Sblock(:,:)
 
     real(dp) :: interSKOver(getMIntegrals(skOverCont))
@@ -155,7 +155,9 @@ contains
     real(dp), allocatable :: temp(:,:)
     dim1 = size(vec, dim=1)
     allocate(temp(dim1, 3 * sizeIn))
-    temp(:,1:sizeIn) = vec   !Check: would be nice if temp could become memory for vec, see if possible in fortran
+    ! v Check: It would be nice if temp could become memory for vec,
+    !          see if possible in fortran
+    temp(:,1:sizeIn) = vec
     call move_alloc(temp, vec)
     
   end subroutine incSizeMat
@@ -170,7 +172,9 @@ contains
     
     real(dp), allocatable :: temp(:)
     allocate(temp(3 * sizeIn))
-    temp(1:sizeIn) = vec   !Check: would be nice if temp could become memory for vec, see if possible in fortran
+    ! v Check: It would be nice if temp could become memory for vec,
+    !          see if possible in fortran
+    temp(1:sizeIn) = vec
     call move_alloc(temp, vec)
     
   end subroutine incSizeVec
@@ -187,7 +191,9 @@ contains
     real(dp), allocatable :: temp(:,:)
     dim1 = size(vec, dim=2)
     allocate(temp(3 * sizeIn, dim1))
-    temp(1:sizeIn,:) = vec   !Check: would be nice if temo could become memory for vec, see if possible in fortran
+    ! v Check: It would be nice if temp could become memory for vec,
+    !          see if possible in fortran
+    temp(1:sizeIn,:) = vec
     call move_alloc(temp, vec)
     
   end subroutine incSizeMatSwapped
@@ -203,7 +209,9 @@ contains
     real(dp), allocatable :: temp(:,:)
     
     allocate(temp(3 * sizeIn, 2 * sizeIn))
-    temp(1:sizeIn, 1:sizeIn) = vec   !Check: would be nice if temo could become memory for vec, see if possible in fortran
+    ! v Check: It would be nice if temp could become memory for vec,
+    !          see if possible in fortran
+    temp(1:sizeIn, 1:sizeIn) = vec
     call move_alloc(temp, vec)
     
   end subroutine incSizeMatBoth
@@ -232,18 +240,21 @@ contains
       dummyM2(:,ii) = sqrt(dummyEV(ii)) * dummyM(:,ii)
     end do
 
-    call dgemm('N', 'T', spaceDim, spaceDim, spaceDim, 1.0_dp, dummyM2, spaceDim, dummyM, spaceDim, 0.0_dp, matOut, memDim)
+    call dgemm('N', 'T', spaceDim, spaceDim, spaceDim, 1.0_dp, dummyM2, spaceDim, dummyM,&
+        & spaceDim, 0.0_dp, matOut, memDim)
     !calc. inv. of sqrt
     do ii = 1, spaceDim
       dummyM2(:,ii) = dummyM(:,ii) / sqrt(dummyEV(ii))
     end do
 
-    call dgemm('N', 'T', spaceDim, spaceDim, spaceDim, 1.0_dp, dummyM2, spaceDim, dummyM, spaceDim, 0.0_dp, matInvOut, memDim)
+    call dgemm('N', 'T', spaceDim, spaceDim, spaceDim, 1.0_dp, dummyM2, spaceDim, dummyM,&
+        & spaceDim, 0.0_dp, matInvOut, memDim)
 
   end subroutine calcMatrixSqrt
 
 
-  !>Perform modified Gram-Schmidt orthonormalization of vectors in columns of vec(1:end). Assume vectors 1:(start-1) are orthonormal yet
+  !>Perform modified Gram-Schmidt orthonormalization of vectors in columns of vec(1:end).
+  !>  Assume vectors 1:(start-1) are orthonormal yet
   pure subroutine orthonormalizeVectors(start, end, vec)
     implicit none
     integer, intent(in) :: start
@@ -265,7 +276,7 @@ contains
  !subroutine multApBVecFast(spin, vin, wIJ, sym, win, nMatUp, homo, nOcc, nVir, ind, &
  !    & sTimesGrndEigVecs, grndEigVecs, occNr, getIJ, gamma, lrGamma, species0, uHubbU, uHubbD, &
  !    & orb, iaTrans, gqvTmp, tQov, tQoo, tQvv, vOut)
-  subroutine multApBVecFast(vin, wIJ, sym, win, nMatUp, homo, nOcc, nVir, occNr, getIJ, gamma, &
+  subroutine multApBVecFast(vin, wIJ, sym, win, nMatUp, homo, nOcc, nVir, occNr, getIJ, gamma,&
       & lrGamma, species0, uHubbU, uHubbD, iaTrans, gqvTmp, tQov, tQoo, tQvv, vOut)
     implicit none
    !logical, intent(in) :: spin ! for now ignore spin and assume unpolarized system
@@ -460,7 +471,8 @@ contains
 
   !>Calculate the product of A-B and a vector.
  !subroutine multAmBVecFast(spin, vin, wIJ, sym, win, nMatUp, homo, nOcc, nVir, ind, &
- !    & sTimesGrndEigVecs, grndEigVecs, occNr, getIJ, gamma, lrGamma, species0, orb, iaTrans, gqvTmp, tQov, tQoo, tQvv, vOut)
+ !    & sTimesGrndEigVecs, grndEigVecs, occNr, getIJ, gamma, lrGamma, species0, orb, &
+ !    & iaTrans, gqvTmp, tQov, tQoo, tQvv, vOut)
   subroutine multAmBVecFast(vin, wIJ, win, nMatUp, homo, nOcc, nVir, &
       & occNr, getIJ, gamma, lrGamma, iaTrans, gqvTmp, tQov, tQoo, tQvv, vOut)
     implicit none
@@ -755,9 +767,8 @@ contains
   end subroutine setupInitMatFast
 
 
-  !> Run Linear Response calc. The actual diagonalization of the RPA equation
-  !> is outsourced to rsLinRespCalc. Most code copied from non range-separated
-  !> version by A. Dominguez.
+  !> Run Linear Response calc. The actual diagonalization of the RPA equation is outsourced
+  !> to rsLinRespCalc. Most code copied from non range-separated version by A. Dominguez.
   subroutine runRsLinRespCalc(spin, tOnsite, nAtom, iAtomStart, grndEigVecs, grndEigVal, sccCalc, &
       & dQ, coord0, nExc, nStat0, cSym, SSqr, filling, species0, nBeweg, uHubb, uHubbU, uHubbD, &
       & rNel, iNeighbor, img2CentCell, orb, rsData, tWriteTagged, fdTagged, taggedWriter, &
@@ -766,7 +777,7 @@ contains
       & tCacheCharges, omega, shift, skHamCont, skOverCont, derivator, deltaRho, excGrad, dQAtomEx)
     implicit none
     logical, intent(in) :: spin
-    logical, intent(inout) :: tOnsite ! intent out so it can be forced to .false. for now
+    logical, intent(in) :: tOnsite
     integer, intent(in) :: nAtom, iAtomStart(:)
     real(dp), intent(in) :: grndEigVecs(:,:,:), grndEigVal(:,:), dQ(:), coord0(:,:)
     type(TScc), intent(in) :: sccCalc
@@ -778,7 +789,7 @@ contains
     real(dp), intent(in) :: uHubb(:), uHubbU(:), uHubbD(:), rNel ! maybe needed for gradients later
     integer, intent(in) :: iNeighbor(0:,:), img2CentCell(:)
     type(TOrbitals), intent(in) :: orb
-    type(RangeSepFunc), intent(inout) :: rsData ! contains long-range gamma
+    type(TRangeSepFunc), intent(inout) :: rsData ! contains long-range gamma
     !> print tag information
     logical, intent(in) :: tWriteTagged
 
@@ -818,17 +829,18 @@ contains
     real(dp), intent(out) :: omega
     real(dp), intent(in), optional :: shift(:)
     real(dp), intent(inout), optional :: deltaRho(:,:)
-    type(OSlakoCont), intent(in), optional :: skHamCont, skOverCont
-    class(NonSccDiff), intent(in), optional :: derivator
+    type(TSlakoCont), intent(in), optional :: skHamCont, skOverCont
+    class(TNonSccDiff), intent(in), optional :: derivator
     real(dp), intent(inout), optional :: excGrad(:,:)   !also may be needed for gradients later on
     real(dp), intent(inout), optional :: dQAtomEx(:)
 
     real(dp) :: Ssq(nExc)
-    real(dp), allocatable :: gamma(:,:), lrGamma(:,:), snglPartTransDip(:,:), sTimesGrndEigVecs(:,:,:), wIJ(:)
-    real(dp), allocatable :: snglPartOscStrength(:), oscStrength(:), vecXmY(:), vecXpY(:), pc(:,:)
-    real(dp), allocatable :: t(:,:), rhs(:), vWoo(:), vWvv(:), vWov(:)
-    real(dp), allocatable :: evec(:,:), eval(:), allXpY(:,:), transitionDipoles(:,:), atomicTransQ(:)
-    real(dp), allocatable :: tQov(:,:), tQoo(:,:), tQvv(:,:)!to hold precalculated transition charges, alloc and calc in rs calc
+    real(dp), allocatable :: gamma(:,:), lrGamma(:,:), wIJ(:), rhs(:), vWoo(:), vWvv(:), vWov(:)
+    real(dp), allocatable :: sTimesGrndEigVecs(:,:,:), snglPartOscStrength(:), snglPartTransDip(:,:)
+    real(dp), allocatable :: vecXmY(:), vecXpY(:), allXpY(:,:), pc(:,:), t(:,:), atomicTransQ(:)
+    real(dp), allocatable :: evec(:,:), eval(:), oscStrength(:), transitionDipoles(:,:)
+    ! precalculated transition charges, alloc and calc in rs calc
+    real(dp), allocatable :: tQov(:,:), tQoo(:,:), tQvv(:,:)
     integer, allocatable :: win(:), iaTrans(:,:), getIJ(:,:)
     character, allocatable :: symmetries(:)
 
@@ -856,9 +868,12 @@ contains
     !> aux variables
     integer :: mu, nu
     
-    tSpin = .false. !For now, spin-polarized calculation not supported
+    ! For now, spin-polarized calculation not supported
+    tSpin = .false.
     nSpin = 1
-    tOnsite = .false. !For now, ons not supported with range separation
+
+    ! For now, ons not supported with range separation
+    @:ASSERT(.not. tOnsite)
 
     ! ARPACK library variables
     ndigit = -3
@@ -1025,7 +1040,8 @@ contains
     wIJ = wIJ(win)
 
     ! dipole strength of transitions between K-S states
-    call calcTransitionDipoles(coord0, win, nXovUD(1), getIJ, iAtomStart, sTimesGrndEigVecs, grndEigVecs, snglPartTransDip)
+    call calcTransitionDipoles(coord0, win, nXovUD(1), getIJ, iAtomStart, sTimesGrndEigVecs, &
+        & grndEigVecs, snglPartTransDip)
 
     ! single particle excitation oscillator strengths
     snglPartOscStrength(:) = twothird * wIJ(:) * sum(snglPartTransDip**2, dim=2)
@@ -1038,7 +1054,8 @@ contains
     if (tOscillatorWindow .or. tEnergyWindow) then
       if (.not. tEnergyWindow) then
         ! find transitions that are strongly dipole allowed (> oscillatorWindow)
-        call dipselect(wIJ, snglPartOscStrength, win, snglPartTransDip, nXovRD, oscillatorWindow, grndEigVal, getIJ)
+        call dipselect(wIJ, snglPartOscStrength, win, snglPartTransDip, nXovRD, oscillatorWindow, &
+            & grndEigVal, getIJ)
       else
         ! energy window above the lowest nExc single particle transitions
         energyThreshold = wIJ(nExc) + energyWindow
@@ -1109,7 +1126,8 @@ contains
 
     ! single particle excitations (output file and tagged file if needed).  Was used for nXovRD =
     ! size(wIJ), but now for just states that are actually included in the excitation calculation.
-    call writeSPExcitations(wIJ, win, nXovUD(1), getIJ, fdSPTrans, snglPartOscStrength, nXovRD, tSpin)
+    call writeSPExcitations(wIJ, win, nXovUD(1), getIJ, fdSPTrans, snglPartOscStrength, nXovRD, &
+        & tSpin)
 
     ! redefine if needed (generalize it for spin-polarized and fractional occupancy)
     nOcc = nint(rNel) / 2
@@ -1439,7 +1457,8 @@ contains
         call setupInitMatFast(subSpaceDim, wIJ, cSym, win, nMatUp, nOcc, homo, occNr, getIJ, &
             & iaTrans, gamma, lrGamma, species0, uHubbU, uHubbD, tQov, tQoo, tQvv, vP, vM, mP, mM)
        !call setupInitMat(initExc, spin, wIJ, cSym, win, nMatUp, iAtomStart, sTimesGrndEigVecs, &
-       !    & grndEigVecs, occNr, getIJ, gamma, lrGamma, species0, uHubbU, uHubbD, orb, vP, vM, mP, mM)
+       !    & grndEigVecs, occNr, getIJ, gamma, lrGamma, species0, uHubbU, uHubbD, orb, vP, vM, &
+       !    & mP, mM)
       end if
       
       call calcMatrixSqrt(mM, subSpaceDim, memDim, workArray, workDim, mMsqrt, mMsqrtInv)
@@ -1860,8 +1879,8 @@ contains
       & excEnergy, skHamCont, skOverCont, derivator, deltaRho, excGrad, dQAtomEx)
     implicit none
     logical, intent(in) :: spin
-    logical, intent(inout) :: tOnsite  
-    type(linresp), intent(inout) :: self
+    logical, intent(in) :: tOnsite  
+    type(TLinResp), intent(inout) :: self
     integer, intent(in) :: iAtomStart(:)
     real(dp), intent(in) :: eigVec(:,:,:)
     real(dp), intent(in) :: eigVal(:,:), SSqrReal(:,:)
@@ -1874,7 +1893,7 @@ contains
     real(dp), intent(in) :: hubbUAtom(:)
     integer, intent(in) :: iNeighbor(0:,:), img2CentCell(:)
     type(TOrbitals), intent(in) :: orb
-    type(RangeSepFunc), intent(inout) :: rsData
+    type(TRangeSepFunc), intent(inout) :: rsData
     !> print tag information
     logical, intent(in) :: tWriteTagged
 
@@ -1887,9 +1906,9 @@ contains
    !real(dp), intent(in) :: ons_en(:,:), ons_dip(:,:)
     real(dp), intent(out) :: excEnergy
    !real(dp), intent(in), optional :: shift(:)
-    type(OSlakoCont), intent(in), optional :: skHamCont, skOverCont
+    type(TSlakoCont), intent(in), optional :: skHamCont, skOverCont
     !> Differentiatior for the non-scc matrices
-    class(NonSccDiff), intent(in), optional :: derivator
+    class(TNonSccDiff), intent(in), optional :: derivator
     real(dp), intent(inout), optional :: deltaRho(:,:)
     real(dp), intent(inout), optional :: excGrad(:,:)
     real(dp), intent(inout), optional :: dQAtomEx(:)
@@ -2521,12 +2540,12 @@ contains
     real(dp), intent(in) :: pc(:,:), dQ(:), dQAtomEx(:), gamma(:,:), lrGamma(:,:) 
     real(dp), intent(in) :: uHubb(:), uHubbU(:), uHubbD(:), shift(:), vWoo(:), vWov(:), vWvv(:)
     real(dp), intent(in) :: vecXpY(:), vecXmY(:), coord0(:,:), tQov(:,:) !, tQoo(:,:), tQvv(:,:)
-    type(RangeSepFunc), intent(inout) :: rsData
+    type(TRangeSepFunc), intent(inout) :: rsData
     integer, intent(in) :: nBeweg
     type(TOrbitals), intent(in) :: orb
-    type(OSlakoCont), intent(in) :: skHamCont, skOverCont
+    type(TSlakoCont), intent(in) :: skHamCont, skOverCont
     !> Differentiatior for the non-scc matrices
-    class(NonSccDiff), intent(in) :: derivator
+    class(TNonSccDiff), intent(in) :: derivator
     real(dp), intent(inout) :: excGrad(:,:), deltaRho(:,:)
     
     real(dp), allocatable :: shEx(:), vecXpYq(:), shXpYQ(:), vecXpYcc(:,:), vecXmYcc(:,:), wcc(:,:)
@@ -2836,8 +2855,10 @@ contains
             end do
           end do
 
-          excGrad(xyz,alpha) = excGrad(xyz,alpha) + tmp1 + tmp2 + tmp4 + tmp6 + tmp3 - 0.25_dp * tmprs2
-          excGrad(xyz,beta) = excGrad(xyz,beta) - tmp1 - tmp2 - tmp4 - tmp6 - tmp3 + 0.25_dp * tmprs2
+          excGrad(xyz,alpha) = excGrad(xyz,alpha) &
+              & + tmp1 + tmp2 + tmp4 + tmp6 + tmp3 - 0.25_dp * tmprs2
+          excGrad(xyz,beta) = excGrad(xyz,beta) &
+              & - tmp1 - tmp2 - tmp4 - tmp6 - tmp3 + 0.25_dp * tmprs2
         end do
       end do
     end do
@@ -2969,7 +2990,7 @@ contains
   subroutine getSqrS(coord, nAtom, skOverCont, orb, iAtomStart, species0, S)
     real(dp), intent(in) :: coord(:,:)
     integer,intent(in) :: nAtom, iAtomStart(:), species0(:)
-    type(OSlakoCont), intent(in) :: skOverCont
+    type(TSlakoCont), intent(in) :: skOverCont
     type(TOrbitals), intent(in) :: orb
     real(dp), intent(out) :: S(:,:)
   

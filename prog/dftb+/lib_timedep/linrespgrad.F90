@@ -17,7 +17,7 @@ module dftbp_linrespgrad
   use dftbp_shortgamma
   use dftbp_accuracy
   use dftbp_constants, only : Hartree__eV, au__Debye
-  use dftbp_nonscc, only : NonSccDiff
+  use dftbp_nonscc, only : TNonSccDiff
   use dftbp_scc, only : TScc
   use dftbp_blasroutines
   use dftbp_eigensolver
@@ -212,16 +212,16 @@ contains
     real(dp), intent(in), optional :: shift(:)
 
     !> non-SCC hamitonian data
-    type(OSlakoCont), intent(in), optional :: skHamCont
+    type(TSlakoCont), intent(in), optional :: skHamCont
 
     !> overlap data
-    type(OSlakoCont), intent(in), optional :: skOverCont
+    type(TSlakoCont), intent(in), optional :: skOverCont
 
     !> excitation energy gradient with respect to atomic positions
     real(dp), intent(out), optional :: excgrad(:,:)
 
     !> Differentiator for H0 and S matrices.
-    class(NonSccDiff), intent(in), optional :: derivator
+    class(TNonSccDiff), intent(in), optional :: derivator
 
     !> ground state square density matrix
     real(dp), intent(in), optional :: rhoSqr(:,:,:)
@@ -238,7 +238,7 @@ contains
     real(dp) :: Ssq(nexc)
     real(dp), allocatable :: gammaMat(:,:), snglPartTransDip(:,:)
     real(dp), allocatable :: stimc(:,:,:), wij(:)
-    real(dp), allocatable :: sposz(:), osz(:), xpy(:), xmy(:), pc(:,:)! , dqex(:)
+    real(dp), allocatable :: sposz(:), osz(:), xpy(:), xmy(:), pc(:,:)
     real(dp), allocatable :: t(:,:), rhs(:), woo(:), wvv(:), wov(:)
     real(dp), allocatable :: evec(:,:), eval(:), transitionDipoles(:,:)
     integer, allocatable :: win(:), getij(:,:)
@@ -624,7 +624,6 @@ contains
 
       ! Arrays for gradients and Mulliken analysis
       if (tZVector) then
-       !ALLOCATE(dqex(natom))
         ALLOCATE(pc(norb, norb))
       end if
 
@@ -1800,13 +1799,13 @@ contains
     type(TOrbitals), intent(in) :: orb
 
     !> H0 data
-    type(OSlakoCont), intent(in) :: skHamCont
+    type(TSlakoCont), intent(in) :: skHamCont
 
     !> overlap data
-    type(OSlakoCont), intent(in) :: skOverCont
+    type(TSlakoCont), intent(in) :: skOverCont
 
     !> Differentiatior for the non-scc matrices
-    class(NonSccDiff), intent(in) :: derivator
+    class(TNonSccDiff), intent(in) :: derivator
 
     !> ground state density matrix for spin-free case
     real(dp), intent(in) :: rhoSqr(:,:)
