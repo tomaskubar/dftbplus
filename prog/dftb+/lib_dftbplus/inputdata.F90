@@ -34,6 +34,7 @@ module dftbp_inputdata
   use libnegf_vars
   use poisson_init
 #:endif
+  use dftbp_machinelearning
 
   implicit none
   private
@@ -490,6 +491,8 @@ module dftbp_inputdata
     type(TWrappedInt1), allocatable :: customOccAtoms(:)
     real(dp), allocatable :: customOccFillings(:,:)
 
+    !> Correction based on machine learning
+    type(TMachineLearningInp), allocatable :: machineLearningInp
   end type TControl
 
 

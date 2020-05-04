@@ -93,6 +93,7 @@ module dftbp_main
   use poisson_init
 #:endif
   use dftbp_transportio
+  use dftbp_machinelearning
 
   implicit none
   private
@@ -441,6 +442,12 @@ contains
       energy%EHalogenX = sum(energy%atomHalogenX(iAtInCentralRegion))
     end if
 
+    if (allocated(machineLearning)) then
+      call env%globalTimer%startTimer(globalTimers%machLearnEnergy)
+      energy%EML = machineLearning%getEnergy(coord, img2CentCell)
+      call env%globalTimer%stopTimer(globalTimers%machLearnEnergy)
+    end if
+
     call resetExternalPotentials(refExtPot, potential)
 
     if (tReadShifts) then
@@ -749,7 +756,7 @@ contains
           & qOutput, q0, skHamCont, skOverCont, pRepCont, neighbourList, nNeighbourSk,&
           & nNeighbourRep, species, img2CentCell, iSparseStart, orb, potential, coord, derivs,&
           & iRhoPrim, thirdOrd, qDepExtPot, chrgForces, dispersion, rangeSep, SSqrReal, over,&
-          & denseDesc, deltaRhoOutSqr, tPoisson, halogenXCorrection)
+          & denseDesc, deltaRhoOutSqr, tPoisson, halogenXCorrection, machineLearning)
 
       if (tCasidaForces) then
         derivs(:,:) = derivs + excitedDerivs
@@ -3484,6 +3491,7 @@ contains
         & + energy%atomLS + energy%atomExt + energy%atom3rd + energy%atomOnSite
     energy%atomTotal(:) = energy%atomElec + energy%atomRep + energy%atomDisp + energy%atomHalogenX
     energy%Etotal = energy%Eelec + energy%Erep + energy%eDisp + energy%eHalogenX
+    energy%Etotal = energy%Etotal + energy%EML
     energy%EMermin = energy%Etotal - sum(TS)
     ! extrapolated to 0 K
     energy%Ezero = energy%Etotal - 0.5_dp * sum(TS)
@@ -5276,10 +5284,10 @@ contains
       & qOutput, q0, skHamCont, skOverCont, pRepCont, neighbourList, nNeighbourSK, nNeighbourRep,&
       & species, img2CentCell, iSparseStart, orb, potential, coord, derivs, iRhoPrim, thirdOrd,&
       & qDepExtPot, chrgForces, dispersion, rangeSep, SSqrReal, over, denseDesc, deltaRhoOutSqr,&
-      & tPoisson, halogenXCorrection)
+      & tPoisson, halogenXCorrection, machineLearning)
 
     !> Environment settings
-    type(TEnvironment), intent(in) :: env
+    type(TEnvironment), intent(inout) :: env
 
     !> SCC module internal variables
     type(TScc), allocatable, intent(in) :: sccCalc
@@ -5383,6 +5391,9 @@ contains
     !> Correction for halogen bonds
     type(THalogenX), allocatable, intent(inout) :: halogenXCorrection
 
+    !> Correction based on machine learning
+    type(TMachineLearning), allocatable, intent(inout) :: machineLearning
+
     ! Locals
     real(dp), allocatable :: tmpDerivs(:,:)
     real(dp), allocatable :: dummyArray(:,:)
@@ -5479,6 +5490,12 @@ contains
 
     if (allocated(halogenXCorrection)) then
       call halogenXCorrection%addGradients(derivs, coord, species, neighbourList, img2CentCell)
+    end if
+
+    if (allocated(machineLearning)) then
+      call env%globalTimer%startTimer(globalTimers%machLearnForce)
+      call machineLearning%addGradients(derivs, img2CentCell)
+      call env%globalTimer%stopTimer(globalTimers%machLearnForce)
     end if
 
     if (allocated(rangeSep)) then

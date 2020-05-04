@@ -66,10 +66,11 @@ module dftbp_environment
 
   end type TEnvironment
 
-  type(TTimerItem), parameter :: globalTimerItems(16) = [&
+  type(TTimerItem), parameter :: globalTimerItems(18) = [&
       & TTimerItem("Global initialisation", 1),&
       & TTimerItem("Pre-SCC initialisation", 1),&
       & TTimerItem("Sparse H0 and S build", 4),&
+      & TTimerItem("Machine learning -- energy", 3),&
       & TTimerItem("SCC", 1),&
       & TTimerItem("Diagonalisation", 2),&
       & TTimerItem("Sparse to dense", 4),&
@@ -81,6 +82,7 @@ module dftbp_environment
       & TTimerItem("Eigenvector writing", 2),&
       & TTimerItem("Energy-density matrix creation", 2),&
       & TTimerItem("Force calculation", 2),&
+      & TTimerItem("Machine learning -- force", 3),&
       & TTimerItem("Stress calculation", 2),&
       & TTimerItem("Post-geometry optimisation", 1)&
       & ]
@@ -89,19 +91,21 @@ module dftbp_environment
     integer :: globalInit = 1
     integer :: preSccInit = 2
     integer :: sparseH0S = 3
-    integer :: scc = 4
-    integer :: diagonalization = 5
-    integer :: sparseToDense = 6
-    integer :: denseToSparse = 7
-    integer :: rangeSeparatedH = 8
-    integer :: densityMatrix = 9
-    integer :: energyEval = 10
-    integer :: postScc = 11
-    integer :: eigvecWriting = 12
-    integer :: energyDensityMatrix = 13
-    integer :: forceCalc = 14
-    integer :: stressCalc = 15
-    integer :: postGeoOpt = 16
+    integer :: machLearnEnergy = 4
+    integer :: scc = 5
+    integer :: diagonalization = 6
+    integer :: sparseToDense = 7
+    integer :: denseToSparse = 8
+    integer :: rangeSeparatedH = 9
+    integer :: densityMatrix = 10
+    integer :: energyEval = 11
+    integer :: postScc = 12
+    integer :: eigvecWriting = 13
+    integer :: energyDensityMatrix = 14
+    integer :: forceCalc = 15
+    integer :: machLearnForce = 16
+    integer :: stressCalc = 17
+    integer :: postGeoOpt = 18 
   end type TGlobalTimersHelper
 
   type(TGlobalTimersHelper), parameter :: globalTimers = TGlobalTimersHelper()

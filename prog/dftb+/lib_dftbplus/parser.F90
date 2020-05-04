@@ -59,6 +59,9 @@ module dftbp_parser
   use poisson_init
   use libnegf_vars
 #:endif
+  use dftbp_machinelearning
+  use dftbp_machinelearning_sf
+  use dftbp_machinelearning_nn
   implicit none
   private
 
@@ -1660,6 +1663,14 @@ contains
     end if
 
     call readCustomisedHubbards(node, geo, slako%orb, ctrl%tShellResolved, ctrl%hubbU)
+
+    ! Correction based on machine learning
+    call getChildValue(node, "MachineLearning", value1, "", child=child, &
+        &allowEmptyValue=.true., dummyValue=.true.)
+    if (associated(value1)) then
+      allocate(ctrl%machineLearningInp)
+      call readMachineLearning(child, geo, ctrl%machineLearningInp)
+    end if
 
   end subroutine readDFTBHam
 
@@ -6320,6 +6331,256 @@ contains
     end if
 
   end subroutine readGrid
+
+  !> Reads in settings of correction based on machine learning
+  subroutine readMachineLearning(node, geo, input)
+
+    !> Node to parse
+    type(fnode), pointer :: node
+
+    !> geometry, including atomic information
+    type(TGeometry), intent(in) :: geo
+
+    !> machine learning data on exit
+    type(TMachineLearningInp), intent(out) :: input
+
+    type(fnode), pointer :: machLearnModel
+    type(string) :: buffer
+
+    call getChildValue(node, "", machLearnModel)
+    call getNodeName(machLearnModel, buffer)
+    select case (char(buffer))
+    case ("neuralnet")
+      allocate(input%nn)
+      allocate(input%sf)
+      call readNeuralNet(machLearnModel, geo, input%nn, input%sf)
+    case default
+      call detailedError(node, "Invalid machine learning model name " // char(buffer))
+    end select
+
+    call testNeuralNetInp(input%nn, input%sf)
+
+  end subroutine readMachineLearning
+
+  !> Reads in settings for a neural network model and the symmetry functions used
+  subroutine readNeuralNet(node, geo, input_nn, input_sf)
+
+    !> Node to process
+    type(fnode), pointer :: node
+
+    !> Geometry of the current system
+    type(TGeometry), intent(in) :: geo
+
+    !> Contains the input for the neural network on exit
+    type(TMLNeuralNetInp), intent(out) :: input_nn
+
+    !> Contains the input for the neural network on exit
+    type(TMLSymmetryFunctionsInp), intent(out) :: input_sf
+
+    type(fnode), pointer :: symmetryFunctions, child, value1
+    type(string) :: buffer
+    type(TListRealR1) :: realBuffer
+  ! integer, allocatable :: nSymmetryFunctions(:)
+    integer :: nTotalRadialFunction, nTotalAngularFunction
+    integer :: iAt, iSp1, iSp2, lowAtomicNumber, previousAtomicNumber, foundSpecies
+    integer, allocatable :: atomicNumberPerSpecies(:), newOrderPerSpecies(:)
+
+    call getChild(node, "SymmetryFunctions", symmetryFunctions)
+
+    ! Number of symmetry functions for each element/species
+    ! This is needed to determine the size of the weight matrix in neural networks below
+    ! ACTUALLY, it is not necessary because it can be determined from symmetry function data
+  ! call getChild(symmetryFunctions, "NumberOfSymmetryFunctions", child)
+  ! allocate(input_sf%nSymmetryFunctions(geo%nSpecies))
+  ! input_sf%nSymmetryFunctions(:) = 0._dp
+  ! do iSp = 1, geo%nSpecies
+  !   call getChildValue(child, geo%speciesNames(iSp), input_sf%nSymmetryFunctions(iSp))
+  ! end do
+
+    call getChildValue(symmetryFunctions, "NeighbourSearching", input_sf%tNeighborSearching, .true.)
+
+    ! Atomic numbers (this is because symm functions are ordered by this)
+    call getChild(symmetryFunctions, "AtomicNumber", child)
+    allocate(atomicNumberPerSpecies(geo%nSpecies))
+    atomicNumberPerSpecies(:) = 0
+    do iSp1 = 1, geo%nSpecies
+      call getChildValue(child, geo%speciesNames(iSp1), atomicNumberPerSpecies(iSp1))
+  !   write (*,'(A,I2,A,I2)') "Species no. ", iSp1, " has atomic number ", atomicNumberPerSpecies(iSp1)
+    end do
+    ! Sort species by atomic number
+    allocate(newOrderPerSpecies(geo%nSpecies))
+  ! write (*,*) "Species orderer by atomic number:"
+    previousAtomicNumber = 0
+    do iSp1 = 1, geo%nSpecies
+      lowAtomicNumber = 999
+      ! find the iSp-th lowest atomic number
+      do iSp2 = 1, geo%nSpecies
+        if (atomicNumberPerSpecies(iSp2) < lowAtomicNumber .and. &
+            & atomicNumberPerSpecies(iSp2) > previousAtomicNumber) then
+          lowAtomicNumber = atomicNumberPerSpecies(iSp2)
+          foundSpecies = iSp2
+        end if
+      end do
+      newOrderPerSpecies(foundSpecies) = iSp1
+      previousAtomicNumber = lowAtomicNumber
+  !   write (*,'(A,I2,A,I2,A,I2)') "Species no. ", foundSpecies, &
+  !       & " has order ", newOrderPerSpecies(foundSpecies), &
+  !       & " and atomic number ", atomicNumberPerSpecies(foundSpecies)
+    end do
+    deallocate(atomicNumberPerSpecies)
+    ! Now, for the purpose of ordering symmetry functions,
+    ! any atom of species "iSp1" will be assigned order "newOrderPerSpecies(iSp1)"
+    ! or directly, an atom iAt will be assigned order "newOrderPerSpecies(geo%species(iAt))"
+    write (*,*) "Assignment to atoms of species ordered by atomic number:"
+    allocate(input_sf%speciesOrder(geo%nAtom))
+    do iAt = 1, geo%nAtom
+      input_sf%speciesOrder(iAt) = newOrderPerSpecies(geo%species(iAt))
+      write (*,'(A,I4,A,A2,A,I2)') "Atom no. ", iAt, " element ", &
+          & geo%speciesNames(geo%species(iAt)), " ordered species ", input_sf%speciesOrder(iAt)
+    end do
+    deallocate(newOrderPerSpecies)
+
+    ! Parameters of radial symmetry functions
+    call getChildValue(symmetryFunctions, "RadialCutoff", input_sf%radialCutoff)
+   !call getChild(symmetryFunctions, "RadialParameters", child)
+    call getChildValue(symmetryFunctions, "RadialParameters", value1, "", child=child)
+    call getNodeName2(value1, buffer)
+    if (char(buffer) == "") then
+      call detailedError(symmetryFunctions, "Empty set of radial symmetry function parameter sets")
+    else
+      call init(realBuffer)
+      call getChildValue(child, "", 2, realBuffer)
+      input_sf%nRadialFunction = len(realBuffer)
+      allocate(input_sf%radialParameters(2, input_sf%nRadialFunction))
+      call asArray(realBuffer, input_sf%radialParameters)
+      call destruct(realBuffer)
+    end if
+
+    ! Parameters of angular symmetry functions
+    call getChildValue(symmetryFunctions, "AngularCutoff", input_sf%angularCutoff)
+   !call getChild(symmetryFunctions, "AngularParameters", child)
+    call getChildValue(symmetryFunctions, "AngularParameters", value1, "", child=child)
+    call getNodeName2(value1, buffer)
+    if (char(buffer) == "") then
+      call detailedError(symmetryFunctions, "Empty set of angular symmetry function parameter sets")
+    else
+      call init(realBuffer)
+      call getChildValue(child, "", 3, realBuffer)
+      input_sf%nAngularFunction = len(realBuffer)
+      allocate(input_sf%angularParameters(3, input_sf%nAngularFunction))
+      call asArray(realBuffer, input_sf%angularParameters)
+      call destruct(realBuffer)
+    end if
+
+    ! Calculate the number of symmetry functions for each species/element
+    nTotalRadialFunction = input_sf%nRadialFunction * geo%nSpecies
+    nTotalAngularFunction = input_sf%nAngularFunction * geo%nSpecies * (geo%nSpecies + 1) / 2
+    input_sf%nSymmetryFunctions = nTotalRadialFunction + nTotalAngularFunction
+
+    call readNeuralNetParameters(node, geo, input_sf%nSymmetryFunctions, input_nn)
+
+  end subroutine readNeuralNet
+
+  subroutine readNeuralNetParameters(node, geo, nSymmetryFunctions, input_nn)
+
+    !> Node to process
+    type(fnode), pointer :: node
+
+    !> Geometry of the current system
+    type(TGeometry), intent(in) :: geo
+
+    !> Number of symmetry functions
+    integer, intent(in) :: nSymmetryFunctions
+
+    !> Contains the input for the neural network on exit
+    type(TMLNeuralNetInp), target, intent(out) :: input_nn
+
+    integer :: iSp
+    type(fnode), pointer :: value1, child, child2
+    type(string) :: buffer, buffer2, buffer3
+    character(lc) :: prefix, suffix, elem, fileName, activ
+    logical :: tLower, tExist
+    integer :: file, iostat, iLayer, iNeuron
+    type(TMLNeuralNetSpeciesInp), pointer :: net
+    
+    ! NN data
+    input_nn%nSp = geo%nSpecies
+    input_nn%nAt = geo%nAtom
+    input_nn%nSF = nSymmetryFunctions
+    allocate(input_nn%species(input_nn%nSp))
+
+    call getChildValue(node, "NeuralNetworkFiles", value1, child=child)
+    call getNodeName(value1, buffer)
+    select case(char(buffer))
+    case ("type2filenames")
+      call getChildValue(value1, "Prefix", buffer2, "")
+      prefix = unquote(char(buffer2))
+      call getChildValue(value1, "Suffix", buffer2, "")
+      suffix = unquote(char(buffer2))
+      call getChildValue(value1, "LowerCaseTypeName", tLower, .false.)
+      do iSp = 1, input_nn%nSp
+        ! use this pointer as shorthand
+        net => input_nn%species(iSp)
+
+        if (tLower) then
+          elem = tolower(geo%speciesNames(iSp))
+        else
+          elem = geo%speciesNames(iSp)
+        end if
+        fileName = trim(prefix) // trim(elem) // trim(suffix)
+        open(newunit=file, file=fileName, status="old", action="read", iostat=iostat)
+        if (iostat /= 0) then
+          call error("Neural net data file cannot be opened under name " // trim(fileName))
+        end if
+        
+        rewind(file)
+
+        read (file, *, iostat=iostat) net%nLayer
+        if (iostat /= 0) then
+          call error("Unable to read 1st data line in file " // trim(fileName))
+        end if
+        allocate(net%layer(net%nLayer))
+
+        do iLayer = 1, net%nLayer
+          ! header of the layer
+          read (file, *, iostat=iostat) net%layer(iLayer)%nNeuron, activ
+          select case(activ)
+          case ("tanh")
+             net%layer(iLayer)%activation = 1
+          case ("sigmoid")
+             net%layer(iLayer)%activation = 2
+          case ("linear")
+             net%layer(iLayer)%activation = 3
+          case default
+             call error("Unknown activation function " // activ // " in file " // trim(fileName))
+          end select
+          ! number of neurons in the previous layer
+          ! for the first layer, it equals the number of symmetry functions for that elmnt/species
+          if (iLayer == 1) then
+            net%layer(iLayer)%nNeuronPrev = nSymmetryFunctions
+          else
+            net%layer(iLayer)%nNeuronPrev = net%layer(iLayer-1)%nNeuron
+          end if
+
+          ! the space can only be allocated now
+          allocate(net%layer(iLayer)%weightBias(net%layer(iLayer)%nNeuron))
+          allocate(net%layer(iLayer)%weight(net%layer(iLayer)%nNeuron, net%layer(iLayer)%nNeuronPrev))
+
+          ! parameters of the layer
+          do iNeuron = 1, net%layer(iLayer)%nNeuron
+            read (file, *, iostat=iostat) net%layer(iLayer)%weightBias(iNeuron), &
+                & net%layer(iLayer)%weight(iNeuron,:)
+          end do
+        end do ! iLayer
+
+        close(file)
+      end do
+    case default
+      call detailedError(node, "Only type2filenames allowed for NeuralNetworkFiles")
+    end select
+
+  end subroutine readNeuralNetParameters
+
 
   function is_numeric(string) result(is)
     character(len=*), intent(in) :: string
