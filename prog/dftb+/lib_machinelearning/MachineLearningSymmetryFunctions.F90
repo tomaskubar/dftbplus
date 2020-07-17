@@ -162,6 +162,8 @@ contains
 
   allocate(this%speciesOrder(nAt))
   this%speciesOrder = input%speciesOrder
+  write (*,*) "speciesOrder"
+  write (*,*) this%speciesOrder
 
   allocate(this%coords(3, nAt))
   allocate(this%distance(nAt, nAt))
@@ -360,13 +362,15 @@ contains
     class(TMLSymmetryFunctions), target, intent(inout) :: this
 
     integer :: iAt1, iAt2, iAt3, iSp2, iNeig, iSF, speciesPair, iSymmFuncInd
-    real(dp) :: R12, R13, R23, Rs, eta, zeta, lambda
+    real(dp) :: R12, R13, R23, Rs, eta, zeta, lambda, cutoff
 
     this%sf = 0._dp
 
     do iAt1 = 1, this%nAt
 
       ! radial symmetry functions
+      write (*,*) "RADIAL"
+      cutoff = this%radialCutoff
       do iNeig = 1, this%neighborListCount(iAt1)
         ! index of the neighbor atom
         iAt2 = this%neighborListArr(iAt1, iNeig)
@@ -376,11 +380,14 @@ contains
           Rs = this%radialParameters(1, iSF)
           eta = this%radialParameters(2, iSF)
           iSymmFuncInd = (iSp2 - 1) * this%nRadialFunction + iSF
-          this%sf(iSymmFuncInd, iAt1) = this%sf(iSymmFuncInd, iAt1) + radialFilter(Rs, eta, R12)
+          this%sf(iSymmFuncInd, iAt1) = this%sf(iSymmFuncInd, iAt1) + radialFilter(Rs, eta, cutoff, R12)
+          write (*,'(I2,2X,I2,2X,2F12.7)') iAt1, iSymmFuncInd, R12, radialFilter(Rs, eta, cutoff, R12)
         end do
       end do
       
       ! angular symmetry functions
+      write (*,*) "ANGULAR"
+      cutoff = this%angularCutoff
       do iNeig = 1, this%neighborPairCount(iAt1)
         ! index of the neighbor atoms
         iAt2 = this%neighborPairArr(iAt1, iNeig, 1)
@@ -396,9 +403,14 @@ contains
           iSymmFuncInd = this%nSp * this%nRadialFunction &
               & + (speciesPair - 1) * this%nAngularFunction + iSF
           this%sf(iSymmFuncInd, iAt1) = this%sf(iSymmFuncInd, iAt1) &
-              & + angularFilter(eta, zeta, lambda, R12, R13, R23)
+              & + angularFilter(eta, zeta, lambda, cutoff, R12, R13, R23)
+          write (*,'(I2,2X,I2,2X,F12.7)') iAt1, iSymmFuncInd, &
+              & angularFilter(eta, zeta, lambda, cutoff, R12, R13, R23)
         end do
       end do
+
+      write (*,*) "Symmetry functions atom no.", iAt1
+      write (*,'(4F12.7)') this%sf(:, iAt1)
 
     end do
         
@@ -411,7 +423,7 @@ contains
     class(TMLSymmetryFunctions), target, intent(inout) :: this
 
     integer :: iAt0, iAt1, iAt2, iAt3, iSp2, iNeig, iSF, iSpPair23, iSymmFuncInd
-    real(dp) :: R12, R13, R23, Rs, eta, zeta, lambda
+    real(dp) :: R12, R13, R23, Rs, eta, zeta, lambda, cutoff
 
     real(dp), dimension(3) :: derivAdd, xyz1, xyz2, xyz3
     logical :: tAtom0Is1, tAtom0Is2, tAtom0Is3
@@ -433,6 +445,7 @@ contains
         end if
 
         ! radial symmetry functions
+        cutoff = this%radialCutoff
         do iNeig = 1, this%neighborListCount(iAt1)
           ! index of the neighbor atom
           iAt2 = this%neighborListArr(iAt1, iNeig)
@@ -457,12 +470,13 @@ contains
             Rs = this%radialParameters(1, iSF)
             eta = this%radialParameters(2, iSF)
             iSymmFuncInd = (iSp2 - 1) * this%nRadialFunction + iSF
-            derivAdd = radialFilterDeriv(Rs, eta, R12, xyz1, xyz2, tAtom0Is1, tAtom0Is2)
+            derivAdd = radialFilterDeriv(Rs, eta, cutoff, R12, xyz1, xyz2, tAtom0Is1, tAtom0Is2)
             this%dsfdr(:, iAt0, iSymmFuncInd, iAt1) = this%dsfdr(:, iAt0, iSymmFuncInd, iAt1) + derivAdd
           end do
         end do
         
         ! angular symmetry functions
+        cutoff = this%angularCutoff
         do iNeig = 1, this%neighborPairCount(iAt1)
           ! index of the neighbor atoms
           iAt2 = this%neighborPairArr(iAt1, iNeig, 1)
@@ -498,7 +512,7 @@ contains
             lambda = this%angularParameters(3, iSF)
             iSymmFuncInd = this%nSp * this%nRadialFunction &
                 & + (iSpPair23 - 1) * this%nAngularFunction + iSF
-            derivAdd = angularFilterDeriv(eta, zeta, lambda, R12, R13, R23, xyz1, xyz2, xyz3, &
+            derivAdd = angularFilterDeriv(eta, zeta, lambda, cutoff, R12, R13, R23, xyz1, xyz2, xyz3, &
                 & tAtom0Is1, tAtom0Is2, tAtom0Is3)
             this%dsfdr(:, iAt0, iSymmFuncInd, iAt1) = this%dsfdr(:, iAt0, iSymmFuncInd, iAt1) + derivAdd
           end do
@@ -518,10 +532,10 @@ contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   !> Radial filter for symmetry functions
-  pure function radialFilter(Rs, eta, Rij)
+  pure function radialFilter(Rs, eta, cutoff, Rij)
 
     !> radial symmetry function parameters
-    real(dp), intent(in) :: Rs, eta
+    real(dp), intent(in) :: Rs, eta, cutoff
 
     !> distance values between two given atoms i and j;
     real(dp), intent(in) :: Rij
@@ -529,16 +543,16 @@ contains
     !> output
     real(dp) :: radialFilter
 
-    radialFilter = exp(-eta * (Rij - Rs)**2)
+    radialFilter = exp(-eta * (Rij - Rs)**2) * switching(Rij, cutoff)
 
   end function radialFilter
 
 
   !> Derivative of the radial symmetry function
-  pure function radialFilterDeriv(Rs, eta, R12, xyz1, xyz2, tAtom0Is1, tAtom0Is2)
+  pure function radialFilterDeriv(Rs, eta, cutoff, R12, xyz1, xyz2, tAtom0Is1, tAtom0Is2)
 
     !> radial symmetry function parameters
-    real(dp), intent(in) :: Rs, eta
+    real(dp), intent(in) :: Rs, eta, cutoff
 
     !> distance 
     real(dp), intent(in) :: R12
@@ -557,7 +571,9 @@ contains
 
     @:ASSERT(tAtom0Is1 .or. tAtom0Is2)
 
-    dG_dR12 = - 2._dp * exp(- eta * (R12 - Rs)**2) * eta * (R12 - Rs)
+   !dG_dR12 = - 2._dp * exp(- eta * (R12 - Rs)**2) * eta * (R12 - Rs)
+    dG_dR12 = - 2._dp * exp(- eta * (R12 - Rs)**2) * eta * (R12 - Rs) * switching(R12, cutoff) &
+        & + radialFilter(Rs, eta, cutoff, R12) * switchingDeriv(R12, cutoff)
 
     if (tAtom0Is1) then
       radialFilterDeriv = dG_dR12 * (xyz1(:) - xyz2(:)) / R12
@@ -570,10 +586,10 @@ contains
   end function radialFilterDeriv
 
 
-  pure function angularFilter(eta, zeta, lambda, Rij, Rik, Rjk)
+  pure function angularFilter(eta, zeta, lambda, cutoff, Rij, Rik, Rjk)
 
     !> angular symmetry function parameters
-    real(dp), intent(in) :: eta, zeta, lambda
+    real(dp), intent(in) :: eta, zeta, lambda, cutoff
 
     !> distances among three atoms i, j, k
     real(dp), intent(in) :: Rij, Rik, Rjk
@@ -585,17 +601,18 @@ contains
 
     cosAngle = (Rij**2 + Rik**2 - Rjk**2)/(2._dp * Rij * Rik)
     radFilter = exp(-eta * (Rij + Rik + Rjk)**2)
-    angularFilter = 2._dp**(1._dp - zeta) * (1._dp + lambda * cosAngle)**zeta * radFilter
+    angularFilter = 2._dp**(1._dp - zeta) * (1._dp + lambda * cosAngle)**zeta * radFilter &
+        & * switching(Rij, cutoff) * switching(Rik, cutoff) * switching(Rjk, cutoff)
 
   end function angularFilter
 
 
   !> Derivative of the angular symmetry function
-  pure function angularFilterDeriv(eta, zeta, lambda, R12, R13, R23, xyz1, xyz2, xyz3, &
+  pure function angularFilterDeriv(eta, zeta, lambda, cutoff, R12, R13, R23, xyz1, xyz2, xyz3, &
       & tAtom0Is1, tAtom0Is2, tAtom0Is3)
 
     !> angular symmetry function parameters
-    real(dp), intent(in) :: eta, zeta, lambda
+    real(dp), intent(in) :: eta, zeta, lambda, cutoff
 
     !> distances
     real(dp), intent(in) :: R12, R13, R23
@@ -627,8 +644,10 @@ contains
     !         & + 2._dp**(1._dp - zeta) * gaussDist * lambda * (1._dp / R13 - cosAngle / R12) * &
     !         &   onePlusLambdaCosAngle**(zeta - 1._dp) * zeta
       dG_dR12 = expZetaMinusOne * gaussDist * &
-              & ( - 2._dp * eta * sumR123 * onePlusLambdaCosAngle &
-              &   + lambda * (1._dp / R13 - cosAngle / R12) * zeta)
+              &   ( - 2._dp * eta * sumR123 * onePlusLambdaCosAngle &
+              &     + lambda * (1._dp / R13 - cosAngle / R12) * zeta) * switching(R12, cutoff) &
+              & + angularFilter(eta, zeta, lambda, cutoff, R12, R13, R23) * switchingDeriv(R12, cutoff)
+      dG_dR12 = dG_dR12 * switching(R13, cutoff) * switching(R23, cutoff)
     end if
 
     if (tAtom0Is1 .or. tAtom0Is3) then
@@ -637,8 +656,10 @@ contains
     !         & + 2._dp**(1._dp - zeta) * gaussDist * lambda * (1._dp / R12 - cosAngle / R13) * &
     !         &   onePlusLambdaCosAngle**(zeta - 1._dp) * zeta
       dG_dR13 = expZetaMinusOne * gaussDist * &
-              & ( - 2._dp * eta * sumR123 * onePlusLambdaCosAngle &
-              &   + lambda * (1._dp / R12 - cosAngle / R13) * zeta)
+              &   ( - 2._dp * eta * sumR123 * onePlusLambdaCosAngle &
+              &     + lambda * (1._dp / R12 - cosAngle / R13) * zeta) * switching(R13, cutoff) &
+              & + angularFilter(eta, zeta, lambda, cutoff, R12, R13, R23) * switchingDeriv(R13, cutoff)
+      dG_dR13 = dG_dR13 * switching(R12, cutoff) * switching(R23, cutoff)
     end if
 
     if (tAtom0Is2 .or. tAtom0Is3) then
@@ -647,8 +668,10 @@ contains
     !         & - 2._dp**(1._dp - zeta) * gaussDist * lambda * R23 / R12 / R13 * &
     !         &   onePlusLambdaCosAngle**(zeta - 1._dp) * zeta
       dG_dR23 = - expZetaMinusOne * gaussDist * &
-              & ( 2._dp * eta * sumR123 * onePlusLambdaCosAngle &
-              & + lambda * R23 / R13 / R12 * zeta)
+              &   ( 2._dp * eta * sumR123 * onePlusLambdaCosAngle &
+              &   + lambda * R23 / R13 / R12 * zeta) * switching(R23, cutoff) &
+              & + angularFilter(eta, zeta, lambda, cutoff, R12, R13, R23) * switchingDeriv(R23, cutoff)
+      dG_dR23 = dG_dR23 * switching(R12, cutoff) * switching(R13, cutoff)
     end if
 
     if (tAtom0Is1) then
@@ -671,5 +694,46 @@ contains
 
   end function angularFilterDeriv
 
+
+  !> Cutoff / switching function
+  pure function switching(r, cutoff)
+
+    !> distance of atoms
+    real(dp), intent(in) :: r
+
+    !> cutoff distance
+    real(dp), intent(in) :: cutoff
+
+    !> output
+    real(dp) :: switching
+
+    if (r < cutoff) then
+      switching = (cos(r * pi / cutoff) + 1._dp) / 2._dp
+    else
+      switching = 0._dp
+    end if
+
+  end function switching
+
+
+  !> Cutoff / switching function derivative
+  pure function switchingDeriv(r, cutoff)
+
+    !> distance of atoms
+    real(dp), intent(in) :: r
+
+    !> cutoff distance
+    real(dp), intent(in) :: cutoff
+
+    !> output
+    real(dp) :: switchingDeriv
+
+    if (r < cutoff) then
+      switchingDeriv = - pi / 2._dp / cutoff * sin(r * pi / cutoff)
+    else
+      switchingDeriv = 0._dp
+    end if
+
+  end function switchingDeriv
 
 end module dftbp_machinelearning_sf
