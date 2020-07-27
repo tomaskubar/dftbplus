@@ -369,7 +369,6 @@ contains
     do iAt1 = 1, this%nAt
 
       ! radial symmetry functions
-      write (*,*) "RADIAL"
       cutoff = this%radialCutoff
       do iNeig = 1, this%neighborListCount(iAt1)
         ! index of the neighbor atom
@@ -381,12 +380,10 @@ contains
           eta = this%radialParameters(2, iSF)
           iSymmFuncInd = (iSp2 - 1) * this%nRadialFunction + iSF
           this%sf(iSymmFuncInd, iAt1) = this%sf(iSymmFuncInd, iAt1) + radialFilter(Rs, eta, cutoff, R12)
-          write (*,'(I2,2X,I2,2X,2F12.7)') iAt1, iSymmFuncInd, R12, radialFilter(Rs, eta, cutoff, R12)
         end do
       end do
       
       ! angular symmetry functions
-      write (*,*) "ANGULAR"
       cutoff = this%angularCutoff
       do iNeig = 1, this%neighborPairCount(iAt1)
         ! index of the neighbor atoms
@@ -404,13 +401,11 @@ contains
               & + (speciesPair - 1) * this%nAngularFunction + iSF
           this%sf(iSymmFuncInd, iAt1) = this%sf(iSymmFuncInd, iAt1) &
               & + angularFilter(eta, zeta, lambda, cutoff, R12, R13, R23)
-          write (*,'(I2,2X,I2,2X,F12.7)') iAt1, iSymmFuncInd, &
-              & angularFilter(eta, zeta, lambda, cutoff, R12, R13, R23)
         end do
       end do
 
-      write (*,*) "Symmetry functions atom no.", iAt1
-      write (*,'(4F12.7)') this%sf(:, iAt1)
+    ! write (*,*) "Symmetry functions atom no.", iAt1
+    ! write (*,'(F15.10)') this%sf(:, iAt1)
 
     end do
         
@@ -474,7 +469,7 @@ contains
             this%dsfdr(:, iAt0, iSymmFuncInd, iAt1) = this%dsfdr(:, iAt0, iSymmFuncInd, iAt1) + derivAdd
           end do
         end do
-        
+
         ! angular symmetry functions
         cutoff = this%angularCutoff
         do iNeig = 1, this%neighborPairCount(iAt1)
@@ -518,9 +513,14 @@ contains
           end do
         end do
 
+      ! if (iAt0 == 2) then
+      !   write (*,*) "Derivatives of SF of atom ", iAt1, " w.r.t. coords of atom ", iAt0
+      !   write (*,"(3F15.8)") this%dsfdr(:, iAt0, :, iAt1)
+      ! end if
+
       end do ! iAt0
 
-    end do ! iAt
+    end do ! iAt1
         
   end subroutine SymmetryFunctions_evaluateDerivs
 
@@ -573,7 +573,7 @@ contains
 
    !dG_dR12 = - 2._dp * exp(- eta * (R12 - Rs)**2) * eta * (R12 - Rs)
     dG_dR12 = - 2._dp * exp(- eta * (R12 - Rs)**2) * eta * (R12 - Rs) * switching(R12, cutoff) &
-        & + radialFilter(Rs, eta, cutoff, R12) * switchingDeriv(R12, cutoff)
+        & + exp(- eta * (R12 - Rs)**2) * switchingDeriv(R12, cutoff)
 
     if (tAtom0Is1) then
       radialFilterDeriv = dG_dR12 * (xyz1(:) - xyz2(:)) / R12
@@ -626,7 +626,7 @@ contains
     !> output
     real(dp), dimension(3) :: angularFilterDeriv
 
-    real(dp) :: expZetaMinusOne, cosAngle, onePlusLambdaCosAngle, sumR123, gaussDist
+    real(dp) :: cosAngle, onePlusLambdaCosAngle, sumR123, gaussDist !, expZetaMinusOne
     real(dp) :: dG_dR12, dG_dR13, dG_dR23
   ! real(dp), dimension(3) :: vector12, vector13, vector21, vector23, vector31, vector32
 
@@ -634,44 +634,48 @@ contains
 
     cosAngle = (R12**2 + R13**2 - R23**2)/(2._dp * R12 * R13)
     onePlusLambdaCosAngle = 1._dp + lambda * cosAngle
-    expZetaMinusOne = (onePlusLambdaCosAngle / 2.)**(zeta - 1._dp)
+  ! expZetaMinusOne = (onePlusLambdaCosAngle / 2.)**(zeta - 1._dp)
     sumR123 = R12 + R13 + R23
     gaussDist = exp(- eta * (R12 + R13 + R23)**2)
 
     if (tAtom0Is1 .or. tAtom0Is2) then
-    ! dG_dR12 = - 2._dp**(2._dp - zeta) * gaussDist * eta * sumR123 * &
-    !         &   onePlusLambdaCosAngle**zeta &
-    !         & + 2._dp**(1._dp - zeta) * gaussDist * lambda * (1._dp / R13 - cosAngle / R12) * &
-    !         &   onePlusLambdaCosAngle**(zeta - 1._dp) * zeta
-      dG_dR12 = expZetaMinusOne * gaussDist * &
-              &   ( - 2._dp * eta * sumR123 * onePlusLambdaCosAngle &
-              &     + lambda * (1._dp / R13 - cosAngle / R12) * zeta) * switching(R12, cutoff) &
-              & + angularFilter(eta, zeta, lambda, cutoff, R12, R13, R23) * switchingDeriv(R12, cutoff)
-      dG_dR12 = dG_dR12 * switching(R13, cutoff) * switching(R23, cutoff)
+    ! dG_dR12 = (- 2._dp**(2._dp - zeta) * gaussDist * eta * sumR123 * &
+    !         &    onePlusLambdaCosAngle**zeta &
+    !         &  + 2._dp**(1._dp - zeta) * gaussDist * lambda * (1._dp / R13 - cosAngle / R12) * &
+    !         &    onePlusLambdaCosAngle**(zeta - 1._dp) * zeta) * switching(R12, cutoff) &
+    !         &  + 2._dp**(1._dp - zeta) * onePlusLambdaCosAngle**zeta * gaussDist * switchingDeriv(R12, cutoff)
+    ! dG_dR12 = dG_dR12 * switching(R13, cutoff) * switching(R23, cutoff)
+      dG_dR12 = 2._dp**(1._dp - zeta) * gaussDist * onePlusLambdaCosAngle**zeta * ( ( &
+              & - 2._dp * eta * sumR123 + lambda * (1._dp / R13 - cosAngle / R12) / &
+              &     onePlusLambdaCosAngle * zeta) * switching(R12, cutoff) + &
+              & switchingDeriv(R12, cutoff) ) * switching(R13, cutoff) * switching(R23, cutoff)
     end if
 
     if (tAtom0Is1 .or. tAtom0Is3) then
-    ! dG_dR13 = - 2._dp**(2._dp - zeta) * gaussDist * eta * sumR123 * &
-    !         &   onePlusLambdaCosAngle**zeta &
-    !         & + 2._dp**(1._dp - zeta) * gaussDist * lambda * (1._dp / R12 - cosAngle / R13) * &
-    !         &   onePlusLambdaCosAngle**(zeta - 1._dp) * zeta
-      dG_dR13 = expZetaMinusOne * gaussDist * &
-              &   ( - 2._dp * eta * sumR123 * onePlusLambdaCosAngle &
-              &     + lambda * (1._dp / R12 - cosAngle / R13) * zeta) * switching(R13, cutoff) &
-              & + angularFilter(eta, zeta, lambda, cutoff, R12, R13, R23) * switchingDeriv(R13, cutoff)
-      dG_dR13 = dG_dR13 * switching(R12, cutoff) * switching(R23, cutoff)
+    ! dG_dR13 = (- 2._dp**(2._dp - zeta) * gaussDist * eta * sumR123 * &
+    !         &    onePlusLambdaCosAngle**zeta &
+    !         &  + 2._dp**(1._dp - zeta) * gaussDist * lambda * (1._dp / R12 - cosAngle / R13) * &
+    !         &    onePlusLambdaCosAngle**(zeta - 1._dp) * zeta) * switching(R13, cutoff) &
+    !         &  + 2._dp**(1._dp - zeta) * onePlusLambdaCosAngle**zeta * gaussDist * switchingDeriv(R13, cutoff)
+    ! dG_dR13 = dG_dR13 * switching(R12, cutoff) * switching(R23, cutoff)
+      dG_dR13 = 2._dp**(1._dp - zeta) * gaussDist * onePlusLambdaCosAngle**zeta * ( ( &
+              & - 2._dp * eta * sumR123 + lambda * (1._dp / R12 - cosAngle / R13) / &
+              &     onePlusLambdaCosAngle * zeta) * switching(R13, cutoff) + &
+              & switchingDeriv(R13, cutoff) ) * switching(R12, cutoff) * switching(R23, cutoff)
     end if
 
     if (tAtom0Is2 .or. tAtom0Is3) then
-    ! dG_dR23 = - 2._dp**(2._dp - zeta) * gaussDist * eta * sumR123 * &
+    ! dG_dR23 =(- 2._dp**(2._dp - zeta) * gaussDist * eta * sumR123 * &
     !         &   onePlusLambdaCosAngle**zeta &
     !         & - 2._dp**(1._dp - zeta) * gaussDist * lambda * R23 / R12 / R13 * &
-    !         &   onePlusLambdaCosAngle**(zeta - 1._dp) * zeta
-      dG_dR23 = - expZetaMinusOne * gaussDist * &
-              &   ( 2._dp * eta * sumR123 * onePlusLambdaCosAngle &
-              &   + lambda * R23 / R13 / R12 * zeta) * switching(R23, cutoff) &
-              & + angularFilter(eta, zeta, lambda, cutoff, R12, R13, R23) * switchingDeriv(R23, cutoff)
-      dG_dR23 = dG_dR23 * switching(R12, cutoff) * switching(R13, cutoff)
+    !         &   onePlusLambdaCosAngle**(zeta - 1._dp) * zeta) &
+    !         &   * switching(R23, cutoff) * switching(R12, cutoff) * switching(R13, cutoff)&
+    !         & + 2._dp**(1._dp - zeta) * onePlusLambdaCosAngle**zeta * gaussDist &
+    !         &   * switching(R12, cutoff) * switching(R13, cutoff) * switchingDeriv(R23, cutoff)
+      dG_dR23 = 2._dp**(1._dp - zeta) * gaussDist * onePlusLambdaCosAngle**zeta * ( ( &
+              & - 2._dp * eta * sumR123 - lambda * R23 / R12 / R13 / onePlusLambdaCosAngle * zeta) &
+              &   * switching(R23, cutoff) + switchingDeriv(R23, cutoff) ) &
+              & * switching(R12, cutoff) * switching(R13, cutoff)
     end if
 
     if (tAtom0Is1) then
