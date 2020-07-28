@@ -307,7 +307,7 @@ contains
   !> Current coordinates
   real(dp), intent(in) :: coords(:,:)
 
-  @:ASSERT(all(shape(coords) = shape(this%coords)))
+  @:ASSERT(all(shape(coords) == shape(this%coords)))
 
   ! conversion is OK
   this%coords = coords * Bohr__AA
@@ -549,7 +549,7 @@ contains
 
 
   !> Derivative of the radial symmetry function
-  pure function radialFilterDeriv(Rs, eta, cutoff, R12, xyz1, xyz2, tAtom0Is1, tAtom0Is2)
+  function radialFilterDeriv(Rs, eta, cutoff, R12, xyz1, xyz2, tAtom0Is1, tAtom0Is2)
 
     !> radial symmetry function parameters
     real(dp), intent(in) :: Rs, eta, cutoff
@@ -608,7 +608,7 @@ contains
 
 
   !> Derivative of the angular symmetry function
-  pure function angularFilterDeriv(eta, zeta, lambda, cutoff, R12, R13, R23, xyz1, xyz2, xyz3, &
+  function angularFilterDeriv(eta, zeta, lambda, cutoff, R12, R13, R23, xyz1, xyz2, xyz3, &
       & tAtom0Is1, tAtom0Is2, tAtom0Is3)
 
     !> angular symmetry function parameters

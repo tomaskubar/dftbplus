@@ -11,15 +11,25 @@
 module dftbp_tempprofile
   use dftbp_assert
   use dftbp_accuracy
+  use dftbp_charmanip, only : tolower
   implicit none
   private
 
-  public :: TTempProfile, init, next, getTemperature
-  public :: constProf, linProf, expProf
+  public :: TTempProfile, TempProfile_init, identifyTempProfile
+
+  ! Internal constants for the different profiles:
+  !> Constant temperature
+  integer, parameter :: constProf = 1
+  !> linear change in profile
+  integer, parameter :: linProf = 2
+  !> exponentially changing profile
+  integer, parameter :: expProf = 3
 
 
   !> Data for the temperature profile.
   type TTempProfile
+
+    private
 
     !> The annealing method for each interval.
     integer, allocatable :: tempMethods(:)
@@ -44,37 +54,13 @@ module dftbp_tempprofile
 
     !> Temperature increment to next step
     real(dp) :: incr
+
+  contains
+
+    procedure :: next
+    procedure :: getTemperature
+
   end type TTempProfile
-
-
-  !> Initialise the profile
-  interface init
-    module procedure TempProfile_init
-  end interface init
-
-
-  !> Next temperature in the profile
-  interface next
-    module procedure TempProfile_next
-  end interface next
-
-
-  !> Get the current temperature in the profile
-  interface getTemperature
-    module procedure TempProfile_getTemperature
-  end interface getTemperature
-
-  ! Constants for the different profile options
-
-  !> Constant temperature
-  integer, parameter :: constProf = 1
-
-  !> linear change in profile
-  integer, parameter :: linProf = 2
-
-  !> exponentially changing profile
-  integer, parameter :: expProf = 3
-
 
   !> Default starting temperature
   real(dp), parameter :: startingTemp_ = minTemp
@@ -83,10 +69,10 @@ contains
 
 
   !> Creates a TempProfile instance.
-  subroutine TempProfile_init(self, tempMethods, tempInts, tempValues)
+  subroutine TempProfile_init(this, tempMethods, tempInts, tempValues)
 
     !> TempProfile instane on return.
-    type(TTempProfile), intent(out) :: self
+    type(TTempProfile), intent(out) :: this
 
     !> The annealing method for each interval.
     integer, intent(in) :: tempMethods(:)
@@ -107,87 +93,111 @@ contains
     @:ASSERT(all(tempInts >= 0))
     @:ASSERT(all(tempValues >= 0.0_dp))
 
-    self%nInt = size(tempInts)
-    allocate(self%tempInts(0:self%nInt))
-    allocate(self%tempValues(0:self%nInt))
-    allocate(self%tempMethods(self%nInt))
-    self%tempInts(0) = 0
-    self%tempInts(1:) = tempInts(:)
-    self%tempValues(0) = startingTemp_
-    self%tempValues(1:) = tempValues(:)
-    self%tempMethods(:) = tempMethods(:)
-    iTmp = self%tempInts(1)
-    do ii = 2, self%nInt
-      iTmp = iTmp + self%tempInts(ii)
-      self%tempInts(ii) = iTmp
+    this%nInt = size(tempInts)
+    allocate(this%tempInts(0:this%nInt))
+    allocate(this%tempValues(0:this%nInt))
+    allocate(this%tempMethods(this%nInt))
+    this%tempInts(0) = 0
+    this%tempInts(1:) = tempInts(:)
+    this%tempValues(1:) = tempValues(:)
+    this%tempMethods(:) = tempMethods(:)
+    iTmp = this%tempInts(1)
+    do ii = 2, this%nInt
+      iTmp = iTmp + this%tempInts(ii)
+      this%tempInts(ii) = iTmp
     end do
-    self%incr = 0
-    self%iStep = 1
-    self%iInt = 1
-    do while (self%tempInts(self%iInt) == 0)
-      self%iInt = self%iInt + 1
+    this%incr = 0
+    this%iStep = 1
+    this%iInt = 1
+    do while (this%tempInts(this%iInt) == 0)
+      this%iInt = this%iInt + 1
     end do
-    self%curTemp = self%tempValues(self%iInt)
+    if (this%tempMethods(this%iInt) == constProf) then
+      this%tempValues(0) = this%tempValues(1)
+    else
+      this%tempValues(0) = startingTemp_
+    end if
+    this%curTemp = this%tempValues(0)
 
   end subroutine TempProfile_init
 
 
   !> Changes the temperature to the next value.
-  subroutine TempProfile_next(self)
+  subroutine next(this)
 
     !> The TempProfile object.
-    type(TTempProfile), intent(inout) :: self
+    class(TTempProfile), intent(inout) :: this
 
     real(dp) :: subVal, supVal
     integer :: sub, sup
-    logical :: tChanged
 
-    self%iStep = self%iStep + 1
-    if (self%iStep > self%tempInts(self%nInt)) then
+    this%iStep = this%iStep + 1
+    if (this%iStep > this%tempInts(this%nInt)) then
       return
     end if
     ! Looking for the next interval which contains the relevant information
-    tChanged = .false.
-    do while (self%tempInts(self%iInt) < self%iStep)
-      self%iInt = self%iInt + 1
-      tChanged = .true.
+    do while (this%tempInts(this%iInt) < this%iStep)
+      this%iInt = this%iInt + 1
     end do
-    sup = self%tempInts(self%iInt)
-    sub = self%tempInts(self%iInt-1)
-    supVal = self%tempValues(self%iInt)
-    subVal = self%tempValues(self%iInt-1)
+    sup = this%tempInts(this%iInt)
+    sub = this%tempInts(this%iInt-1)
+    supVal = this%tempValues(this%iInt)
+    subVal = this%tempValues(this%iInt-1)
 
-    select case (self%tempMethods(self%iInt))
+    select case (this%tempMethods(this%iInt))
     case (constProf)
-      self%curTemp = self%tempValues(self%iInt)
+      this%curTemp = this%tempValues(this%iInt)
     case (linProf)
-      if (tChanged) then
-        self%incr = (supVal - subVal) / real(sup - sub, dp)
-      end if
-      self%curTemp = subVal + self%incr * real(self%iStep - sub, dp)
+      this%incr = (supVal - subVal) / real(sup - sub, dp)
+      this%curTemp = subVal + this%incr * real(this%iStep - sub, dp)
     case (expProf)
-      if (tChanged) then
-        self%tempValues(self%iInt) = supVal
-        self%tempValues(self%iInt-1) = subVal
-        self%incr = log(supVal/subVal) / real(sup - sub, dp)
-      end if
-      self%curTemp = subVal * exp(self%incr * real(self%iStep - sub, dp))
+      this%tempValues(this%iInt) = supVal
+      this%tempValues(this%iInt-1) = subVal
+      this%incr = log(supVal/subVal) / real(sup - sub, dp)
+      this%curTemp = subVal * exp(this%incr * real(this%iStep - sub, dp))
     end select
 
-  end subroutine TempProfile_next
+  end subroutine next
 
 
   !> Returns the current temperature.
-  subroutine TempProfile_getTemperature(self, temp)
+  subroutine getTemperature(this, temp)
 
     !> Pointer to the TempProfile object.
-    type(TTempProfile), intent(in) :: self
+    class(TTempProfile), intent(in) :: this
 
     !> Temperature on return.
     real(dp), intent(out) :: temp
 
-    temp = self%curTemp
+    temp = this%curTemp
 
-  end subroutine TempProfile_getTemperature
+  end subroutine getTemperature
+
+
+  !> Maps a (supported) profile name onto integer identifier
+  subroutine identifyTempProfile(iProfile, profileName, success)
+
+    !> Internal profile identifying number
+    integer, intent(out) :: iProfile
+
+    !> Possible profile name
+    character(*), intent(in) :: profileName
+
+    !> was the profile correctly identified
+    logical, intent(out) :: success
+
+    success = .true.
+    select case (tolower(trim(profileName)))
+    case ("constant")
+      iProfile = constProf
+    case ("linear")
+      iProfile = linProf
+    case ("exponential")
+      iProfile = expProf
+    case default
+      success = .false.
+    end select
+
+  end subroutine identifyTempProfile
 
 end module dftbp_tempprofile

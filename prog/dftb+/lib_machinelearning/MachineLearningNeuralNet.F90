@@ -152,7 +152,7 @@ contains
     integer :: iLayer, iNeuronThis, iNeuronPrev
 
     @:ASSERT(input%nLayer == this%nLayer)
-    @:ASSERT(size(sf) == size(this%layer(1)%valueAct))
+    @:ASSERT(size(sf) == size(this%layer(0)%valueAct))
 
     ! set the 1st layer activation to the values of symmetry functions
     this%layer(0)%valueAct = sf
@@ -197,7 +197,8 @@ contains
 
     write (*,*) "  NEURAL NET EVALUATE"
 
-    @:ASSERT(size(sf, dim=1) == this%input%nSF)
+  ! @:ASSERT(size(sf, dim=1) == this%input%nSF)
+    @:ASSERT(size(sf, dim=1) == this%nSF)
     @:ASSERT(size(sf, dim=2) == this%nAt)
     @:ASSERT(size(energyAtom) == this%nAt)
 
@@ -229,7 +230,7 @@ contains
 
     integer :: iLayer, iNeuronThis, iNeuronPrev
 
-    @:ASSERT(size(derivAtom) == size(this%layer(1)%derivAct))
+    @:ASSERT(size(derivAtom) == size(this%layer(this%nLayer)%derivAct))
 
     ! set the 1st layer activation derivatives to the derivaties of symmetry functions
     this%layer(0)%derivAct = dsfdr
@@ -421,7 +422,7 @@ contains
 
   write (*,*) "  NEURAL NET INIT"
 
-  @:ASSERT(dim(species) == input%nSp)
+  @:ASSERT(size(species) == input%nAt)
 
   this%nAt = input%nAt
   this%nSp = input%nSp

@@ -29,8 +29,8 @@ module dftbp_environment
   type :: TEnvironment
     private
 
-    !> Whether this process is the master?
-    logical, public :: tGlobalMaster = .true.
+    !> Whether this process is the lead?
+    logical, public :: tGlobalLead = .true.
 
     !> Nr. of groups in the system
     integer, public :: nGroup = 1
@@ -53,6 +53,9 @@ module dftbp_environment
     type(TBlacsEnv), public :: blacs
   #:endif
 
+    !> Is this calculation called by the API?
+    logical, public :: tAPICalculation = .false.
+
   contains
     procedure :: destruct => TEnvironment_destruct
     procedure :: shutdown => TEnvironment_shutdown
@@ -66,12 +69,19 @@ module dftbp_environment
 
   end type TEnvironment
 
-  type(TTimerItem), parameter :: globalTimerItems(18) = [&
+  type(TTimerItem), parameter :: globalTimerItems(27) = [&
       & TTimerItem("Global initialisation", 1),&
       & TTimerItem("Pre-SCC initialisation", 1),&
       & TTimerItem("Sparse H0 and S build", 4),&
       & TTimerItem("Machine learning -- energy", 3),&
       & TTimerItem("SCC", 1),&
+      & TTimerItem("Poisson", 2),&
+      & TTimerItem("Poisson Ewald", 4),&
+      & TTimerItem("Poisson bulk read", 4),&
+      & TTimerItem("Poisson bulk compute", 4),&
+      & TTimerItem("Poisson solution", 4),&
+      & TTimerItem("Poisson shifts", 4),&
+      & TTimerItem("Poisson charge density build", 4),&
       & TTimerItem("Diagonalisation", 2),&
       & TTimerItem("Sparse to dense", 4),&
       & TTimerItem("Dense to sparse", 4),&
@@ -84,7 +94,9 @@ module dftbp_environment
       & TTimerItem("Force calculation", 2),&
       & TTimerItem("Machine learning -- force", 3),&
       & TTimerItem("Stress calculation", 2),&
-      & TTimerItem("Post-geometry optimisation", 1)&
+      & TTimerItem("Post-geometry optimisation", 1),&
+      & TTimerItem("Electron dynamics initialisation", 2),&
+      & TTimerItem("Electron dynamics loop", 2)&
       & ]
 
   type :: TGlobalTimersHelper
@@ -93,19 +105,29 @@ module dftbp_environment
     integer :: sparseH0S = 3
     integer :: machLearnEnergy = 4
     integer :: scc = 5
-    integer :: diagonalization = 6
-    integer :: sparseToDense = 7
-    integer :: denseToSparse = 8
-    integer :: rangeSeparatedH = 9
-    integer :: densityMatrix = 10
-    integer :: energyEval = 11
-    integer :: postScc = 12
-    integer :: eigvecWriting = 13
-    integer :: energyDensityMatrix = 14
-    integer :: forceCalc = 15
-    integer :: machLearnForce = 16
-    integer :: stressCalc = 17
-    integer :: postGeoOpt = 18 
+    integer :: poisson = 6
+    integer :: poissonEwald = 7
+    integer :: poissonBulkRead = 8
+    integer :: poissonBulkCalc = 9
+    integer :: poissonSoln = 10
+    integer :: poissonShifts = 11
+    integer :: poissonDensity = 12
+    integer :: diagonalization = 13
+    integer :: sparseToDense = 14
+    integer :: denseToSparse = 15
+    integer :: rangeSeparatedH = 16
+    integer :: densityMatrix = 17
+    integer :: energyEval = 18
+    integer :: postScc = 19
+    integer :: eigvecWriting = 20
+    integer :: energyDensityMatrix = 21
+    integer :: forceCalc = 22
+    integer :: machLearnForce = 23
+    integer :: stressCalc = 24
+    integer :: postGeoOpt = 25
+    integer :: elecDynInit = 26
+    integer :: elecDynLoop = 27
+
   end type TGlobalTimersHelper
 
   type(TGlobalTimersHelper), parameter :: globalTimers = TGlobalTimersHelper()
@@ -190,7 +212,7 @@ contains
 
     ! MPI settings
     call TMpiEnv_init(this%mpi, nGroup)
-    this%tGlobalMaster = this%mpi%tGlobalMaster
+    this%tGlobalLead = this%mpi%tGlobalLead
     this%nGroup = this%mpi%nGroup
     this%myGroup = this%mpi%myGroup
 
