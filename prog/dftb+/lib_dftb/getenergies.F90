@@ -251,6 +251,7 @@ contains
         & + energy%atomSolv
     energy%atomTotal(:) = energy%atomElec + energy%atomRep + energy%atomDisp + energy%atomHalogenX
     energy%Etotal = energy%Eelec + energy%Erep + energy%eDisp + energy%eHalogenX
+    energy%Etotal = energy%Etotal + energy%EML
     energy%EMermin = energy%Etotal - sum(TS)
     ! extrapolated to 0 K
     energy%Ezero = energy%Etotal - 0.5_dp * sum(TS)

@@ -40,6 +40,7 @@ endif()
 if(WITH_GPU)
   add_subdirectory(lib_magmahelper)
 endif()
+add_subdirectory(lib_machinelearning)
 
 dftbp_preprocess("${FYPP}" "${FYPP_FLAGS}" "F90" "f90" "${ALL-SOURCES-FPP}" all-sources-f90-preproc)
 

@@ -69,10 +69,11 @@ module dftbp_environment
 
   end type TEnvironment
 
-  type(TTimerItem), parameter :: globalTimerItems(25) = [&
+  type(TTimerItem), parameter :: globalTimerItems(27) = [&
       & TTimerItem("Global initialisation", 1),&
       & TTimerItem("Pre-SCC initialisation", 1),&
       & TTimerItem("Sparse H0 and S build", 4),&
+      & TTimerItem("Machine learning -- energy", 3),&
       & TTimerItem("SCC", 1),&
       & TTimerItem("Poisson", 2),&
       & TTimerItem("Poisson Ewald", 4),&
@@ -91,6 +92,7 @@ module dftbp_environment
       & TTimerItem("Eigenvector writing", 2),&
       & TTimerItem("Energy-density matrix creation", 2),&
       & TTimerItem("Force calculation", 2),&
+      & TTimerItem("Machine learning -- force", 3),&
       & TTimerItem("Stress calculation", 2),&
       & TTimerItem("Post-geometry optimisation", 1),&
       & TTimerItem("Electron dynamics initialisation", 2),&
@@ -101,28 +103,30 @@ module dftbp_environment
     integer :: globalInit = 1
     integer :: preSccInit = 2
     integer :: sparseH0S = 3
-    integer :: scc = 4
-    integer :: poisson = 5
-    integer :: poissonEwald = 6
-    integer :: poissonBulkRead = 7
-    integer :: poissonBulkCalc = 8
-    integer :: poissonSoln = 9
-    integer :: poissonShifts = 10
-    integer :: poissonDensity = 11
-    integer :: diagonalization = 12
-    integer :: sparseToDense = 13
-    integer :: denseToSparse = 14
-    integer :: rangeSeparatedH = 15
-    integer :: densityMatrix = 16
-    integer :: energyEval = 17
-    integer :: postScc = 18
-    integer :: eigvecWriting = 19
-    integer :: energyDensityMatrix = 20
-    integer :: forceCalc = 21
-    integer :: stressCalc = 22
-    integer :: postGeoOpt = 23
-    integer :: elecDynInit = 24
-    integer :: elecDynLoop = 25
+    integer :: machLearnEnergy = 4
+    integer :: scc = 5
+    integer :: poisson = 6
+    integer :: poissonEwald = 7
+    integer :: poissonBulkRead = 8
+    integer :: poissonBulkCalc = 9
+    integer :: poissonSoln = 10
+    integer :: poissonShifts = 11
+    integer :: poissonDensity = 12
+    integer :: diagonalization = 13
+    integer :: sparseToDense = 14
+    integer :: denseToSparse = 15
+    integer :: rangeSeparatedH = 16
+    integer :: densityMatrix = 17
+    integer :: energyEval = 18
+    integer :: postScc = 19
+    integer :: eigvecWriting = 20
+    integer :: energyDensityMatrix = 21
+    integer :: forceCalc = 22
+    integer :: machLearnForce = 23
+    integer :: stressCalc = 24
+    integer :: postGeoOpt = 25
+    integer :: elecDynInit = 26
+    integer :: elecDynLoop = 27
 
   end type TGlobalTimersHelper
 
