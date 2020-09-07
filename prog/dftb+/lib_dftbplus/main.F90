@@ -95,6 +95,7 @@ module dftbp_main
   use dftbp_timeprop
   use dftbp_qdepextpotproxy, only : TQDepExtPotProxy
   use dftbp_taggedoutput, only : TTaggedWriter
+  use dftbp_perturbxderivs
   use dftbp_reks
   use dftbp_plumed, only : TPlumedCalc, TPlumedCalc_final
 #:if WITH_TRANSPORT
@@ -176,6 +177,18 @@ contains
           & .and. needsRestartWriting(isGeoOpt, tMd, iGeoStep, nGeoSteps, restartFreq)
       call printGeoStepInfo(tCoordOpt, tLatOpt, iLatGeoStep, iGeoStep)
       call processGeometry(env, iGeoStep, iLatGeoStep, tWriteRestart, tStopScc, tExitGeoOpt)
+
+      if (tXDerivs) then
+        call dPsidx(env, parallelKS, filling, eigen, eigVecsReal, eigvecsCplx, rhoPrim, potential,&
+            & qOutput, q0, ham, over, skHamCont, skOverCont, nonSccDeriv, orb, nAtom, species,&
+            & speciesName, neighbourList, nNeighbourSK, denseDesc, iSparseStart, img2CentCell,&
+            & coord, sccCalc, maxSccIter, sccTol, nMixElements, nIneqOrb, iEqOrbitals, tempElec,&
+            & Ef, tFixEf, spinW, thirdOrd, tDFTBU, UJ, nUJ, iUJ, niUJ, iEqBlockDftbu,&
+            & onSiteElements, iEqBlockOnSite, rangeSep, nNeighbourLC, pChrgMixer, taggedWriter,&
+            & tWriteAutotest, autotestTag, tWriteResultsTag, resultsTag, tWriteDetailedOut,&
+            & fdDetailedOut, kPoint, kWeight, iCellVec, cellVec, tPeriodic, tMulliken)
+      end if
+
       if (tExitGeoOpt) then
         exit geoOpt
       end if

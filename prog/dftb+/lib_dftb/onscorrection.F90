@@ -38,7 +38,7 @@ contains
     real(dp), intent(in), allocatable :: qiBlock(:,:,:,:)
 
     !> reference charges
-    real(dp), intent(in) :: q0(:,:,:)
+    real(dp), intent(in), optional :: q0(:,:,:)
 
     !> onsite matrix elements for shells (elements between s orbitals on the same shell are ignored)
     real(dp), intent(in) :: onsMEs(:,:,:,:)
@@ -72,9 +72,11 @@ contains
         ! extract the relevant charge parts
         tmpBlock(:nOrb, :nOrb) = qBlock(:nOrb, :nOrb, iAt, iSpin)
         ! diagonal adjusted by reference charges
-        do iOrb = 1, nOrb
-          tmpBlock(iOrb, iOrb) = tmpBlock(iOrb, iOrb) - q0(iOrb, iAt, iSpin)
-        end do
+        if (present(q0)) then
+          do iOrb = 1, nOrb
+            tmpBlock(iOrb, iOrb) = tmpBlock(iOrb, iOrb) - q0(iOrb, iAt, iSpin)
+          end do
+        end if
 
         ! (lambda_ss \pm lambda_st) Delta P^\pm, note that ss' is already zero
         tmpBlock(:nOrb,:nOrb) = tmpBlock(:nOrb,:nOrb) *&

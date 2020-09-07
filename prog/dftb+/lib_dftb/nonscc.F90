@@ -44,6 +44,9 @@ module dftbp_nonscc
     !> evaluate second derivative
     procedure :: getSecondDeriv
 
+    !> evaluate first derivative of the whole matrix w.r.t. one atom
+    procedure :: getFirstDerivWhole
+
   end type TNonSccDiff
 
   !> Namespace for possible differentiation methods
@@ -234,6 +237,84 @@ contains
     end select
 
   end subroutine getFirstDeriv
+
+  !> Calculates the first derivative of H0 or S with respect to iAt position
+  subroutine getFirstDerivWhole(this, deriv, env, skCont, coords, species, iAt, orb, nNeighbourSK,&
+      & iNeighbours, iPair, img2centcell)
+
+    !> Instance
+    class(TNonSccDiff), intent(in) :: this
+
+    !> Derivative of H0 or S diatomic block, with respect to x,y,z (last index).
+    real(dp), intent(out) :: deriv(:,:)
+
+    !> Computational environment settings
+    type(TEnvironment), intent(in) :: env
+
+    !> Container for the SK integrals
+    type(TSlakoCont), intent(in) :: skCont
+
+    !> List of all coordinates, including possible periodic images of atoms
+    real(dp), intent(in) :: coords(:,:)
+
+    !> Chemical species of each atom
+    integer, intent(in) :: species(:)
+
+    !> Atom to differentiate wrt
+    integer, intent(in) :: iAt
+
+    !> Orbital informations
+    type(TOrbitals), intent(in) :: orb
+
+    !> Number of neighbours for each central cell atom
+    integer, intent(in) :: nNeighbourSK(:)
+
+    !> List of neighbours for each central cell
+    integer, intent(in) :: iNeighbours(0:,:)
+
+    !> Index in the sparse matrix for the start of diatomic pairs
+    integer, intent(in) :: iPair(0:,:)
+
+    !> indexing array for periodic image atoms
+    integer, intent(in) :: img2CentCell(:)
+
+    real(dp) :: tmp(size(deriv,dim=1))
+    real(dp), allocatable :: coordTmp(:,:)
+    integer :: ii, iCart
+
+    deriv(:,:) = 0.0_dp
+
+    select case (this%diffType)
+    case (diffTypes%finiteDiff)
+
+      coordTmp = coords
+      do iCart = 1, 3
+        tmp(:) = 0.0_dp
+        do ii = -1, 1, 2
+          coordTmp(:,iAt) = coords(:,iAt)
+          coordTmp(iCart,iAt) = coords(iCart,iAt) + ii * this%deltaXDiff
+          if (ii == 1) then
+            ! onsites cancel, so can use build S for either H0 or S
+            call buildS(env, deriv(:,iCart), skCont, coordTmp, nNeighbourSK, iNeighbours, species,&
+                & iPair, orb)
+          else
+            call buildS(env, tmp, skCont, coordTmp, nNeighbourSK, iNeighbours, species, iPair, orb)
+          end if
+        end do
+        deriv(:,iCart) = (deriv(:,iCart) - tmp) / (2.0_dp * this%deltaXDiff)
+      end do
+
+    case (diffTypes%richardson)
+
+      call error("Finite difference method not currently implemented for full derivatives")
+
+    case default
+
+      call error("Derivator not initialised")
+
+    end select
+
+  end subroutine getFirstDerivWhole
 
   !> Calculates the numerical second derivative of a diatomic block of H0 or S.
   subroutine getSecondDeriv(this, deriv, skCont, coords, species, atomI, atomJ, orb)

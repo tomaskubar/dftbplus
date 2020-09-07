@@ -193,6 +193,9 @@ module dftbp_inputdata
 
     type(TPipekMezeyInp), allocatable :: pipekMezeyInp
 
+    !> Shall derivatives wrt coords be evaluated?
+    logical :: tXDerivs = .false.
+
     !> printing of atom resolved energies
     logical :: tAtomicEnergy = .false.
 

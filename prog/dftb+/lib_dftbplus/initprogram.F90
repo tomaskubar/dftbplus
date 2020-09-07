@@ -502,6 +502,9 @@ module dftbp_initprogram
   !> Pipek-Mezey localisation calculator
   type(TPipekMezey), allocatable :: pipekMezey
 
+  !> Shall derivatives wrt atomic coordinates be evaluated?
+  logical :: tXDerivs
+
   !> use commands from socket communication to control the run
   logical :: tSocket
 
@@ -1768,7 +1771,7 @@ contains
        call error("This ForceEvaluation method requires the electron temperature to be zero")
      end if
 
-     tRequireDerivator = tForces
+     tRequireDerivator = tForces .or. input%ctrl%tXDerivs
      if (.not. tRequireDerivator .and. allocated(input%ctrl%elecDynInp)) then
        tRequireDerivator = input%ctrl%elecDynInp%tIons
      end if
@@ -2116,6 +2119,9 @@ contains
       call error("Localisation of electronic states currently unsupported for non-collinear and&
           & spin orbit calculations")
     end if
+
+    !> x derivatives (first steps for properties vibrational modes and dq/dx)
+    tXDerivs = input%ctrl%tXDerivs
 
     if (isLinResp) then
 

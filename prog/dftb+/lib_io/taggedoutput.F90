@@ -14,7 +14,7 @@
     & ('logical', 'Logical', 'logical', 'formLogical')]
 
 #! Maximal rank to include into the interface (string from 0 - scalar)
-#:set MAX_RANK = 4
+#:set MAX_RANK = 5
 
 
 !> Contains routines to write out various data structures in a comprehensive tagged format.
@@ -167,6 +167,9 @@ module dftbp_taggedoutput
 
     !> External electric field
     character(lenLabel) :: externField = 'external_efield'
+
+    !> Derivatives of gross atomic charges wrt. x
+    character(lenLabel) :: dqdx = 'dqdx'
 
     !> two-electron addition/removal energies in ppRPA formalism
     character(lenLabel) :: egyppRPA = '2e_add-rem_energies'

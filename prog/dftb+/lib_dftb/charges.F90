@@ -38,7 +38,7 @@ contains
 
 
     !> Reference populations.
-    real(dp), intent(in) :: q0(:,:,:)
+    real(dp), intent(in), optional :: q0(:,:,:)
 
 
     !> Unique Hubbard U indices (only needed if dQUniqU is passed)
@@ -82,7 +82,11 @@ contains
       end if
     end if
 
-    call getSummedChargesPerOrbital(qOrbital(:,:,1), q0(:,:,1), dQWork)
+    if (present(q0)) then
+      call getSummedChargesPerOrbital(qOrbital(:,:,1), q0(:,:,1), dQWork)
+    else
+      dQWork(:,:) = qOrbital(:,:,1)
+    end if
     if (present(dQAtom)) then
       call getSummedChargesPerAtom(dQWork, dQAtom)
     end if
