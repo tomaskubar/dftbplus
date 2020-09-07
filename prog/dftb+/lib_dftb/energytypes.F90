@@ -101,6 +101,9 @@ module dftbp_energytypes
     !> used for example in geometry optimisation or energetic comparisions.
     real(dp) :: EForceRelated = 0.0_dp
 
+    !> Energy correction based on machine learning
+    real(dp) :: EML = 0.0_dp
+
     !> atom resolved repulsive
     real(dp), allocatable :: atomRep(:)
 

@@ -39,6 +39,7 @@ module dftbp_inputdata
   use libnegf_vars
 #:endif
   use poisson_init
+  use dftbp_machinelearning
 
   implicit none
   private
@@ -511,6 +512,9 @@ module dftbp_inputdata
 
     !> REKS input
     type(TReksInp) :: reksInp
+
+    !> Correction based on machine learning
+    type(TMachineLearningInp), allocatable :: machineLearningInp
 
   end type TControl
 

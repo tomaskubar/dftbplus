@@ -115,6 +115,7 @@ module dftbp_initprogram
 #:endif
   use poisson_init
   use dftbp_transportio
+  use dftbp_machinelearning
   implicit none
 
 
@@ -1005,6 +1006,9 @@ module dftbp_initprogram
   !> Correction for {O,N}-X bonds
   type(THalogenX), allocatable :: halogenXCorrection
 
+  !> Correction based on machine learning
+  type(TMachineLearning), allocatable :: machineLearning
+
   !> All of the excited energies actuall solved by Casida routines (if used)
   real(dp), allocatable :: energiesCasida(:)
 
@@ -1563,6 +1567,11 @@ contains
       end if
       allocate(halogenXCorrection)
       call THalogenX_init(halogenXCorrection, species0, speciesName)
+    end if
+
+    if (allocated(input%ctrl%machineLearningInp)) then
+      allocate(machineLearning)
+      call machineLearning%init(input%ctrl%machineLearningInp, nAtom, nType, species0)
     end if
 
     allocate(referenceN0(orb%mShell, nType))
@@ -3106,6 +3115,9 @@ contains
     write(stdOut, "(A,':')") "Extra options"
     if (tPrintMulliken) then
       write(stdOut, "(T30,A)") "Mulliken analysis"
+    end if
+    if (allocated(input%ctrl%machineLearningInp)) then
+      write(stdOut, "(T30,A)") "Machine learning based correction"
     end if
     if (tPrintForces .and. .not. (tMD .or. isGeoOpt .or. tDerivs)) then
       write(stdOut, "(T30,A)") "Force calculation"

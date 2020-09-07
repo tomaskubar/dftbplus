@@ -103,6 +103,7 @@ module dftbp_main
 #:endif
   use poisson_init
   use dftbp_transportio
+  use dftbp_machinelearning
 
   implicit none
   private
@@ -457,6 +458,12 @@ contains
       call halogenXCorrection%getEnergies(energy%atomHalogenX, coord, species, neighbourList,&
           & img2CentCell)
       energy%EHalogenX = sum(energy%atomHalogenX(iAtInCentralRegion))
+    end if
+
+    if (allocated(machineLearning)) then
+      call env%globalTimer%startTimer(globalTimers%machLearnEnergy)
+      energy%EML = machineLearning%getEnergy(coord, img2CentCell)
+      call env%globalTimer%stopTimer(globalTimers%machLearnEnergy)
     end if
 
     call resetExternalPotentials(refExtPot, potential)
@@ -917,7 +924,7 @@ contains
             & nNeighbourRep, species, img2CentCell, iSparseStart, orb, potential, coord, derivs,&
             & iRhoPrim, thirdOrd, solvation, qDepExtPot, chrgForces, dispersion, rangeSep,&
             & SSqrReal, over, denseDesc, deltaRhoOutSqr, tPoisson, halogenXCorrection, tHelical,&
-            & coord0)
+            & machineLearning, coord0)
 
         if (tCasidaForces) then
           derivs(:,:) = derivs + excitedDerivs
@@ -5056,7 +5063,8 @@ contains
       & ERhoPrim, qOutput, q0, skHamCont, skOverCont, pRepCont, neighbourList, nNeighbourSK,&
       & nNeighbourRep, species, img2CentCell, iSparseStart, orb, potential, coord, derivs,&
       & iRhoPrim, thirdOrd, solvation, qDepExtPot, chrgForces, dispersion, rangeSep, SSqrReal,&
-      & over, denseDesc, deltaRhoOutSqr, tPoisson, halogenXCorrection, tHelical, coord0)
+      & over, denseDesc, deltaRhoOutSqr, tPoisson, halogenXCorrection, tHelical, machineLearning,&
+      & coord0)
 
     !> Environment settings
     type(TEnvironment), intent(inout) :: env
@@ -5169,6 +5177,9 @@ contains
     !> Is the geometry helical
     logical, intent(in) :: tHelical
 
+    !> Correction based on machine learning
+    type(TMachineLearning), allocatable, intent(inout) :: machineLearning
+
     !> Central cell atomic coordinates
     real(dp), intent(in) :: coord0(:,:)
 
@@ -5278,6 +5289,12 @@ contains
 
     if (allocated(halogenXCorrection)) then
       call halogenXCorrection%addGradients(derivs, coord, species, neighbourList, img2CentCell)
+    end if
+
+    if (allocated(machineLearning)) then
+      call env%globalTimer%startTimer(globalTimers%machLearnForce)
+      call machineLearning%addGradients(derivs, img2CentCell)
+      call env%globalTimer%stopTimer(globalTimers%machLearnForce)
     end if
 
     if (allocated(rangeSep)) then
