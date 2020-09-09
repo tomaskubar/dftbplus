@@ -179,14 +179,13 @@ contains
       call processGeometry(env, iGeoStep, iLatGeoStep, tWriteRestart, tStopScc, tExitGeoOpt)
 
       if (tXDerivs) then
-        call dPsidx(env, parallelKS, filling, eigen, eigVecsReal, eigvecsCplx, rhoPrim, potential,&
-            & qOutput, q0, ham, over, skHamCont, skOverCont, nonSccDeriv, orb, nAtom, species,&
-            & speciesName, neighbourList, nNeighbourSK, denseDesc, iSparseStart, img2CentCell,&
-            & coord, sccCalc, maxSccIter, sccTol, nMixElements, nIneqOrb, iEqOrbitals, tempElec,&
-            & Ef, tFixEf, spinW, thirdOrd, tDFTBU, UJ, nUJ, iUJ, niUJ, iEqBlockDftbu,&
-            & onSiteElements, iEqBlockOnSite, rangeSep, nNeighbourLC, pChrgMixer, taggedWriter,&
-            & tWriteAutotest, autotestTag, tWriteResultsTag, resultsTag, tWriteDetailedOut,&
-            & fdDetailedOut, kPoint, kWeight, iCellVec, cellVec, tPeriodic, tMulliken)
+        call dPsidx(env, parallelKS, filling, eigen, eigVecsReal, rhoPrim, potential, qOutput, q0,&
+            & ham, over, skHamCont, skOverCont, nonSccDeriv, orb, nAtom, species, neighbourList,&
+            & nNeighbourSK, denseDesc, iSparseStart, img2CentCell, coord, sccCalc, maxSccIter,&
+            & sccTol, nMixElements, nIneqOrb, iEqOrbitals, tempElec, Ef, tFixEf, spinW, thirdOrd,&
+            & tDFTBU, UJ, nUJ, iUJ, niUJ, iEqBlockDftbu, onSiteElements, iEqBlockOnSite, rangeSep,&
+            & nNeighbourLC, pChrgMixer, taggedWriter, tWriteAutotest, autotestTag,&
+            & tWriteResultsTag, resultsTag, tWriteDetailedOut, fdDetailedOut, tMulliken)
       end if
 
       if (tExitGeoOpt) then

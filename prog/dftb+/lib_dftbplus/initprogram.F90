@@ -3285,6 +3285,16 @@ contains
       call printReksInitInfo(reks, orb, speciesName, nType)
     end if
 
+    if (tXDerivs) then
+      if (t2Component) then
+        call error("Coupled-perturbed equations are not compatible with this spinor Hamiltonian")
+      end if
+
+      if (.not. tRealHS) then
+        call error("Coupled-perturbed equations do not support k-points")
+      end if
+    end if
+
     call env%globalTimer%stopTimer(globalTimers%globalInit)
 
   end subroutine initProgramVariables
