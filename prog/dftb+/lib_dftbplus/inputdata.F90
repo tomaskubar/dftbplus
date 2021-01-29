@@ -14,6 +14,7 @@ module dftbp_inputdata
   use dftbp_accuracy
   use dftbp_typegeometry
   use dftbp_message
+  use dftbp_dftbplusu, only : TDftbUInp
   use dftbp_dispersions, only : TDispersionInp
   use dftbp_linresp, only : TLinrespini
   use dftbp_pprpa, only : TppRPAcal
@@ -79,8 +80,19 @@ module dftbp_inputdata
 
   !> LBFGS input settings
   type TLbfgsInput
+
     !> Number of stored steps
     integer :: memory
+
+    !> Is a line search followed along quasi-Newton directions
+    logical :: isLineSearch
+
+    !> Should the quasi-Newton step be limited?
+    logical :: MaxQNStep
+
+    !> If performing line search, should the original implementation be used
+    logical :: isOldLS
+
   end type TLbfgsInput
 
 
@@ -249,7 +261,6 @@ module dftbp_inputdata
 
     !> initial charges
     real(dp), allocatable :: initialCharges(:)
-    logical :: tDFTBU        = .false.
 
     !> Electronic/eigenvalue solver options
     type(TElectronicSolverInp) :: solver
@@ -348,21 +359,8 @@ module dftbp_inputdata
     !> spin-orbit constants
     real(dp), allocatable :: xi(:,:)
 
-
-    !> choice of the DFTB+U functional
-    integer :: DFTBUfunc     = 0
-
-    !> list of U-J for species
-    real(dp), allocatable :: UJ(:,:)
-
-    !> How many U-J for each species
-    integer, allocatable :: nUJ(:)
-
-    !> number of l-values of U-J for each block
-    integer, allocatable :: niUJ(:,:)
-
-    !> l-values of U-J for each block
-    integer, allocatable :: iUJ(:,:,:)
+    !> DFTB+U input, if present
+    type(TDftbUInp), allocatable :: dftbUInp
 
     !> Correction to energy from on-site matrix elements
     real(dp), allocatable :: onSiteElements(:,:,:,:)
