@@ -52,22 +52,6 @@ module dftbp_mmapi
   end type TDftbPlusAtomList
 
 
-  !> list of QM atoms and species for DFTB+ calculation
-  type :: TDftbPlusAtomList
-    !> number of atoms
-    integer :: nAtom
-    !> linked list of chemical symbols of elements (species names), size=nSpecies
-    type(TListString) :: speciesNames
-    !> array of species for each atom, size=nAtom
-    integer, allocatable :: species(:)
-  contains
-    !> read list of atoms
-    procedure :: get => TDftbPlusAtomList_get
-    !> insert the list of atoms into the input data structure
-    procedure :: add => TDftbPlusAtomList_addToInpData
-  end type TDftbPlusAtomList
-
-
   !> input tree for DFTB+ calculation
   type :: TDftbPlusInput
     !> tree for HSD format input
