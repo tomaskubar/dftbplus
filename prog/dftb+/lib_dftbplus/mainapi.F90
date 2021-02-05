@@ -34,6 +34,7 @@ module dftbp_mainapi
   public :: getEnergy, getGradients, getExtChargeGradients, getGrossCharges, getStressTensor
   public :: nrOfAtoms, getAtomicMasses
   public :: updateDataDependentOnSpeciesOrdering, checkSpeciesNames
+  public :: nrOfOrbitals, getEigenValues
 
 
 contains
@@ -413,6 +414,39 @@ contains
     outMass = main%mass
 
   end subroutine getAtomicMasses
+
+
+  !> Obtains number of orbitals
+  function nrOfOrbitals(main)
+
+    !> Instance
+    type(TDftbPlusMain), intent(in) :: main
+
+    integer :: nrOfOrbitals
+
+    nrOfOrbitals = main%nOrb
+
+  end function nrOfOrbitals
+
+
+  !> get the eigenvalues / orbitals eneriges
+  subroutine getEigenValues(env, main, eigVal)
+
+    !> instance
+    type(TEnvironment), intent(inout) :: env
+
+    !> Instance
+    type(TDftbPlusMain), intent(inout) :: main
+
+    !> resulting charges
+    real(dp), intent(out) :: eigVal(:)
+
+  ! call recalcGeometry(env, main)
+    eigVal(:) = main%eigen(:,1,1)
+    ! we assume main%t2Component == .false. and main%nKPoint == 1 and main%nSpinHams == 1
+    ! in that case, the array sizes are equal
+
+  end subroutine getEigenValues
 
 
 

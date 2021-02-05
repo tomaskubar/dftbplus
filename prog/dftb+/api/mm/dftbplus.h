@@ -272,6 +272,15 @@ void dftbp_get_stress_tensor(DftbPlus *instance, double *stresstensor);
  */
 void dftbp_get_gross_charges(DftbPlus *instance, double *charges);
 
+/**
+ * Queries the eigenvalues / orbital energies
+ *
+ * \param[inout] instance Handler of the DFTB+ instance.
+ *
+ * \param[out] eigVal Eigenvalues of orbitals.  Shape [norb]. Unit: Hartree
+ */
+void dftbp_get_eigenvalues(DftbPlus *instance, double *eigVal);
+
 #ifdef __cplusplus
 }
 #endif

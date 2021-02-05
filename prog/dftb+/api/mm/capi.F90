@@ -444,6 +444,26 @@ contains
   end subroutine c_DftbPlus_getGrossCharges
 
 
+  !> Obtain the DFTB+ eigenvalues (orbital energies)
+  subroutine c_DftbPlus_getEigenValues(handler, eigVal)&
+      & bind(C, name='dftbp_get_eigenvalues')
+
+    !> handler for the calculation
+    type(c_DftbPlus), intent(inout) :: handler
+
+    !> resulting atomic charges
+    real(c_double), intent(out) :: eigVal(*)
+
+    type(TDftbPlusC), pointer :: instance
+    integer :: nOrb
+
+    call c_f_pointer(handler%instance, instance)
+    nOrb = instance%nrOfOrbitals()
+    call instance%getEigenValues(eigVal(1:nOrb))
+
+  end subroutine c_DftbPlus_getEigenValues
+
+
   !> Converts a 0-char terminated C-type string into a Fortran string.
   function fortranChar(cstring, maxlen)
 

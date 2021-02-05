@@ -103,6 +103,10 @@ module dftbp_mmapi
     procedure, private :: checkInit => TDftbPlus_checkInit
     !> Return the masses for each atom in the system
     procedure :: getAtomicMasses => TDftbPlus_getAtomicMasses
+    !> Return the number of orbitals
+    procedure :: nrOfOrbitals => TDftbPlus_nrOfOrbitals
+    !> get the DFTB+ eigenvalues
+    procedure :: getEigenValues => TDftbPlus_getEigenValues
   end type TDftbPlus
 
 
@@ -668,5 +672,37 @@ contains
     call updateDataDependentOnSpeciesOrdering(this%env, this%main, inputSpecies)
 
   end subroutine TDftbPlus_setSpeciesAndDependents
+
+
+  !> Returns the nr. of atoms in the system.
+  function TDftbPlus_nrOfOrbitals(this) result(nOrb)
+
+    !> Instance
+    class(TDftbPlus), intent(in) :: this
+
+    !> Nr. of atoms
+    integer :: nOrb
+
+    call this%checkInit()
+
+    nAtom = nrOfOrbitals(this%main)
+
+  end function TDftbPlus_nrOfOrbitals
+
+
+  !> Returns the eigenvalues (of each orbital)
+  subroutine TDftbPlus_getEigenValues(this, eigVal)
+
+    !> Instance
+    class(TDftbPlus), intent(inout) :: this
+
+    !> Atomic gross charges.
+    real(dp), intent(out) :: eigVal(:)
+
+    call this%checkInit()
+
+    call getEigenValues(this%env, this%main, eigVal)
+
+  end subroutine TDftbPlus_getEigenValues
 
 end module dftbp_mmapi
