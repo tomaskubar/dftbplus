@@ -685,7 +685,7 @@ contains
 
     call this%checkInit()
 
-    nAtom = nrOfOrbitals(this%main)
+    nOrb = nrOfOrbitals(this%main)
 
   end function TDftbPlus_nrOfOrbitals
 
