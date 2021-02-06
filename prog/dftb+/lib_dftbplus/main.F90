@@ -112,6 +112,9 @@ module dftbp_main
   public :: runDftbPlus
   public :: processGeometry
 
+  ! used in the API
+  public :: buildDenseRealHam
+
   !> O(N^2) density matrix creation
   logical, parameter :: tDensON2 = .false.
 
@@ -2647,6 +2650,96 @@ contains
   #:endif
 
   end subroutine buildAndDiagDenseRealHam
+
+
+  !> Builds dense Hamiltonian -- no diagonalization (for FMO)
+  subroutine buildDenseRealHam(env, denseDesc, ham, over, neighbourList,&
+      & nNeighbourSK, iSparseStart, img2CentCell, orb, iAtomStart, tHelical, coord,&
+      & rangeSep, deltaRhoInSqr, qOutput, nNeighbourLC, HSqrReal, SSqrReal)
+
+    !> Environment settings
+    type(TEnvironment), intent(inout) :: env
+
+    !> Dense matrix descriptor
+    type(TDenseDescr), intent(in) :: denseDesc
+
+    !> hamiltonian in sparse storage
+    real(dp), intent(in) :: ham(:,:)
+
+    !> sparse overlap matrix
+    real(dp), intent(in) :: over(:)
+
+    !> list of neighbours for each atom
+    type(TNeighbourList), intent(in) :: neighbourList
+
+    !> Number of neighbours for each of the atoms
+    integer, intent(in) :: nNeighbourSK(:)
+
+    !> Index array for the start of atomic blocks in sparse arrays
+    integer, intent(in) :: iSparseStart(:,:)
+
+    !> map from image atoms to the original unique atom
+    integer, intent(in) :: img2CentCell(:)
+
+    !> Atomic orbital information
+    type(TOrbitals), intent(in) :: orb
+
+    !> Start of atomic blocks in dense arrays
+    integer, allocatable, intent(in) :: iAtomStart(:)
+
+    !> Is the geometry helical
+    logical, intent(in) :: tHelical
+
+    !> Coordinates of all atoms including images
+    real(dp), allocatable, intent(inout) :: coord(:,:)
+
+    !>Data for rangeseparated calcualtion
+    type(TRangeSepFunc), allocatable, intent(inout) :: rangeSep
+
+    !> Change in density matrix during last rangesep SCC cycle
+    real(dp), pointer, intent(in) :: deltaRhoInSqr(:,:,:)
+
+    !> Output electrons
+    real(dp), intent(inout) :: qOutput(:,:,:)
+
+    !> Number of neighbours for each of the atoms for the exchange contributions in the long range
+    !> functional
+    integer, intent(in), allocatable :: nNeighbourLC(:)
+
+    !> dense hamiltonian matrix
+    real(dp), intent(out) :: HSqrReal(:,:)
+
+    !> dense overlap matrix
+    real(dp), intent(out) :: SSqrReal(:,:)
+
+  #:if WITH_SCALAPACK
+    write (*,*) "NO SCALAPACK POSSIBLE"
+    stop
+  #:else
+    call env%globalTimer%startTimer(globalTimers%sparseToDense)
+    if (tHelical) then
+      write (*,*) "NO HELICAL POSSIBLE"
+      stop
+    else
+      call unpackHS(HSqrReal, ham(:,1), neighbourList%iNeighbour, nNeighbourSK,&
+          & denseDesc%iAtomStart, iSparseStart, img2CentCell)
+      call unpackHS(SSqrReal, over, neighbourList%iNeighbour, nNeighbourSK, denseDesc%iAtomStart,&
+          & iSparseStart, img2CentCell)
+    end if
+    call env%globalTimer%stopTimer(globalTimers%sparseToDense)
+
+    ! Add rangeseparated contribution
+    ! Assumes deltaRhoInSqr only used by rangeseparation
+    ! Should this be used elsewhere, need to pass isRangeSep
+    if (allocated(rangeSep)) then
+      call denseMulliken(deltaRhoInSqr, SSqrReal, denseDesc%iAtomStart, qOutput)
+      call rangeSep%addLRHamiltonian(env, deltaRhoInSqr(:,:,1), over,&
+          & neighbourList%iNeighbour,  nNeighbourLC, denseDesc%iAtomStart, iSparseStart,&
+          & orb, HSqrReal, SSqrReal)
+    end if
+  #:endif
+
+  end subroutine buildDenseRealHam
 
 
   !> Builds and diagonalises dense k-point dependent Hamiltonians.

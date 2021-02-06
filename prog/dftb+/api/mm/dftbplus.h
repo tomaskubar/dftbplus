@@ -281,6 +281,26 @@ void dftbp_get_gross_charges(DftbPlus *instance, double *charges);
  */
 void dftbp_get_eigenvalues(DftbPlus *instance, double *eigVal);
 
+/**
+ * Queries the eigenvalues / orbital energies
+ *
+ * \param[inout] instance Handler of the DFTB+ instance.
+ *
+ * \param[out] eigVec Eigenvectors / coefficients of orbitals.  Shape [norb,norb].
+ */
+void dftbp_get_eigenvectors(DftbPlus *instance, double *eigVec);
+
+/**
+ * Queries the eigenvalues / orbital energies
+ *
+ * \param[inout] instance Handler of the DFTB+ instance.
+ *
+ * \param[out] hamil Self-consistent Hamiltonian matrix.  Shape [norb,norb].
+ *
+ * \param[out] overl Overlap matrix.  Shape [norb,norb].
+ */
+void dftbp_get_hamil_overl(DftbPlus *instance, double *hamil, double *overl);
+
 #ifdef __cplusplus
 }
 #endif

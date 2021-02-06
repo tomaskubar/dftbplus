@@ -451,8 +451,8 @@ contains
     !> handler for the calculation
     type(c_DftbPlus), intent(inout) :: handler
 
-    !> resulting atomic charges
-    real(c_double), intent(out) :: eigVal(*)
+    !> returned eigenvalues
+    real(c_double), intent(out) :: eigVal(:)
 
     type(TDftbPlusC), pointer :: instance
     integer :: nOrb
@@ -462,6 +462,49 @@ contains
     call instance%getEigenValues(eigVal(1:nOrb))
 
   end subroutine c_DftbPlus_getEigenValues
+
+
+  !> Obtain the DFTB+ eigenvectors (coefficients of orbitals)
+  subroutine c_DftbPlus_getEigenVectors(handler, eigVec)&
+      & bind(C, name='dftbp_get_eigenvectors')
+
+    !> handler for the calculation
+    type(c_DftbPlus), intent(inout) :: handler
+
+    !> returned eigenvectors
+    real(c_double), intent(out) :: eigVec(:,:)
+
+    type(TDftbPlusC), pointer :: instance
+    integer :: nOrb
+
+    call c_f_pointer(handler%instance, instance)
+    nOrb = instance%nrOfOrbitals()
+    call instance%getEigenVectors(eigVec(1:nOrb,1:nOrb))
+
+  end subroutine c_DftbPlus_getEigenVectors
+
+
+  !> Obtain the DFTB+ self-consistent Hamiltonian and overlap matrices
+  subroutine c_DftbPlus_getHamilOverl(handler, hamil, overl)&
+      & bind(C, name='dftbp_get_hamil_overl')
+
+    !> handler for the calculation
+    type(c_DftbPlus), intent(inout) :: handler
+
+    !> returned Hamiltonian
+    real(c_double), intent(out) :: hamil(:,:)
+
+    !> returned overlap
+    real(c_double), intent(out) :: overl(:,:)
+
+    type(TDftbPlusC), pointer :: instance
+    integer :: nOrb
+
+    call c_f_pointer(handler%instance, instance)
+    nOrb = instance%nrOfOrbitals()
+    call instance%getHamilOverl(hamil(1:nOrb,1:nOrb), overl(1:nOrb,1:nOrb))
+
+  end subroutine c_DftbPlus_getHamilOverl
 
 
   !> Converts a 0-char terminated C-type string into a Fortran string.

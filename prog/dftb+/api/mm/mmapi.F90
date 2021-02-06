@@ -107,6 +107,10 @@ module dftbp_mmapi
     procedure :: nrOfOrbitals => TDftbPlus_nrOfOrbitals
     !> get the DFTB+ eigenvalues
     procedure :: getEigenValues => TDftbPlus_getEigenValues
+    !> get the DFTB+ eigenvectors
+    procedure :: getEigenVectors => TDftbPlus_getEigenVectors
+    !> get the DFTB+ hamiltonian and overlap matrices
+    procedure :: getHamilOverl => TDftbPlus_getHamilOverl
   end type TDftbPlus
 
 
@@ -696,7 +700,7 @@ contains
     !> Instance
     class(TDftbPlus), intent(inout) :: this
 
-    !> Atomic gross charges.
+    !> Eigenvalues.
     real(dp), intent(out) :: eigVal(:)
 
     call this%checkInit()
@@ -704,5 +708,40 @@ contains
     call getEigenValues(this%env, this%main, eigVal)
 
   end subroutine TDftbPlus_getEigenValues
+
+
+  !> Returns the eigenvectors (orbitals)
+  subroutine TDftbPlus_getEigenVectors(this, eigVec)
+
+    !> Instance
+    class(TDftbPlus), intent(inout) :: this
+
+    !> Eigenvectors.
+    real(dp), intent(out) :: eigVec(:,:)
+
+    call this%checkInit()
+
+    call getEigenVectors(this%env, this%main, eigVec)
+
+  end subroutine TDftbPlus_getEigenVectors
+
+
+  !> Returns the Hamiltonian and overlap matrices
+  subroutine TDftbPlus_getHamilOverl(this, hamil, overl)
+
+    !> Instance
+    class(TDftbPlus), intent(inout) :: this
+
+    !> Hamiltonian matrix.
+    real(dp), intent(out) :: hamil(:,:)
+
+    !> Overlap matrix.
+    real(dp), intent(out) :: overl(:,:)
+
+    call this%checkInit()
+
+    call getHamilOverl(this%env, this%main, hamil, overl)
+
+  end subroutine TDftbPlus_getHamilOverl
 
 end module dftbp_mmapi

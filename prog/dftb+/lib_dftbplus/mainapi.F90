@@ -19,6 +19,7 @@ module dftbp_mainapi
   use dftbp_initprogram, only : getDenseDescBlacs
 #:endif
   use dftbp_main, only : processGeometry
+  use dftbp_main, only : buildDenseRealHam
   use dftbp_message, only : error
   use dftbp_orbitals, only : TOrbitals
   use dftbp_qdepextpotproxy, only : TQDepExtPotProxy
@@ -34,7 +35,7 @@ module dftbp_mainapi
   public :: getEnergy, getGradients, getExtChargeGradients, getGrossCharges, getStressTensor
   public :: nrOfAtoms, getAtomicMasses
   public :: updateDataDependentOnSpeciesOrdering, checkSpeciesNames
-  public :: nrOfOrbitals, getEigenValues
+  public :: nrOfOrbitals, getEigenValues, getEigenVectors, getHamilOverl
 
 
 contains
@@ -429,7 +430,7 @@ contains
   end function nrOfOrbitals
 
 
-  !> get the eigenvalues / orbitals eneriges
+  !> get the eigenvalues / orbital energies
   subroutine getEigenValues(env, main, eigVal)
 
     !> instance
@@ -438,7 +439,7 @@ contains
     !> Instance
     type(TDftbPlusMain), intent(inout) :: main
 
-    !> resulting charges
+    !> returned eigenvalues
     real(dp), intent(out) :: eigVal(:)
 
   ! call recalcGeometry(env, main)
@@ -447,6 +448,53 @@ contains
     ! in that case, the array sizes are equal
 
   end subroutine getEigenValues
+
+
+  !> get the eigenvectors / orbital coefficients
+  subroutine getEigenVectors(env, main, eigVec)
+
+    !> instance
+    type(TEnvironment), intent(inout) :: env
+
+    !> Instance
+    type(TDftbPlusMain), intent(inout) :: main
+
+    !> returned eigenvectors
+    real(dp), intent(out) :: eigVec(:,:)
+
+  ! call recalcGeometry(env, main)
+    eigVec(:,:) = main%eigVecsReal(:,:,1)
+    ! we assume main%t2Component == .false. and main%nKPoint == 1 and main%nSpinHams == 1
+    ! in that case, the array size is nOrb x nOrb
+
+  end subroutine getEigenVectors
+
+
+  !> get the eigenvalues / orbitals eneriges
+  subroutine getHamilOverl(env, main, hamil, overl)
+
+    !> instance
+    type(TEnvironment), intent(inout) :: env
+
+    !> Instance
+    type(TDftbPlusMain), intent(inout) :: main
+
+    !> returned Hamiltonian matrix
+    real(dp), intent(out) :: hamil(:,:)
+
+    !> returned overlap matrix
+    real(dp), intent(out) :: overl(:,:)
+
+  ! call recalcGeometry(env, main)
+    call buildDenseRealHam(env, main%denseDesc, main%ham, main%over, main%neighbourList,&
+      & main%nNeighbourSK, main%iSparseStart, main%img2CentCell, main%orb,&
+      & main%denseDesc%iAtomStart, main%tHelical, main%coord, main%rangeSep, main%deltaRhoInSqr,&
+      & main%qOutput, main%nNeighbourLC, main%HSqrReal, main%SSqrReal)
+    hamil(:,:) = main%HSqrReal(:,:)
+    overl(:,:) = main%SSqrReal(:,:)
+    ! we assume main%t2Component == .false. and main%nKPoint == 1 and main%nSpinHams == 1
+
+  end subroutine getHamilOverl
 
 
 
