@@ -273,6 +273,15 @@ void dftbp_get_stress_tensor(DftbPlus *instance, double *stresstensor);
 void dftbp_get_gross_charges(DftbPlus *instance, double *charges);
 
 /**
+ * Queries the nr. of orbitals in the system.
+ *
+ * \param[inout] instance Handler of the DFTB+ instance.
+ *
+ * \return Nr. of orbitals
+ */
+int dftbp_get_nr_orbitals(DftbPlus *instance);
+
+/**
  * Queries the eigenvalues / orbital energies
  *
  * \param[inout] instance Handler of the DFTB+ instance.

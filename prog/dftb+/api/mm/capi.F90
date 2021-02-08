@@ -444,6 +444,19 @@ contains
   end subroutine c_DftbPlus_getGrossCharges
 
 
+  !> Obtain nr. of orbitals
+  function c_DftbPlus_nrOfOrbitals(handler) result(nOrb) bind(C, name='dftbp_get_nr_orbitals')
+    type(c_DftbPlus), intent(inout) :: handler
+    integer(c_int) :: nOrb
+
+    type(TDftbPlusC), pointer :: instance
+
+    call c_f_pointer(handler%instance, instance)
+    nOrb = instance%nrOfOrbitals()
+
+  end function c_DftbPlus_nrOfOrbitals
+
+
   !> Obtain the DFTB+ eigenvalues (orbital energies)
   subroutine c_DftbPlus_getEigenValues(handler, eigVal)&
       & bind(C, name='dftbp_get_eigenvalues')
