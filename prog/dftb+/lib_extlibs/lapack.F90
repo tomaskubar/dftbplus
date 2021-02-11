@@ -999,6 +999,31 @@ module dftbp_lapack
   end interface zpotrf
 
 
+  !> Inverse of double precision symmetric positive definite matrix
+  interface dpotri
+
+    !> Inversion of double precision symmetric positive definite matrix
+    subroutine dpotri(uplo, nn, aa, lda, info)
+      import rdp
+
+      !> Upper 'U' or lower 'L' triangle
+      character, intent(in) :: uplo
+
+      !> matrix dimension
+      integer, intent(in) :: nn
+
+      !> Leading dimension of A
+      integer, intent(in) :: lda
+
+      !> matrix A
+      real(rdp), intent(inout) :: aa(lda, *)
+
+      !> state of routine on return
+      integer, intent(out) :: info
+    end subroutine dpotri
+  end interface dpotri
+
+
   !> Reduce real symmetric-definite generalized eigenproblem to standard form
   interface ssygst
 
