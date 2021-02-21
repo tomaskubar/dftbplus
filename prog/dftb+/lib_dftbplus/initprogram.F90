@@ -1492,6 +1492,9 @@ contains
 
     this%tPoisson = input%ctrl%tPoisson
 
+    ! FMO DFTB -- make sure that this is explicitly set to false even if we do DFTB1
+    this%tExtChrg = .false.
+
     if (this%tSccCalc) then
       allocate(sccInp)
       allocate(this%sccCalc)

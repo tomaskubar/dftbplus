@@ -34,6 +34,7 @@ module dftbp_fmo
   use dftbp_elstatpot, only : TElStatPotentials
   use dftbp_qdepextpotproxy, only : TQDepExtPotProxy
   use dftbp_initprogram
+  use dftbp_main, only : handleCoordinateChange
 
   implicit none
   private
@@ -57,7 +58,8 @@ module dftbp_fmo
     integer :: iHOMO
 
     ! sparse matrix, overlap
-    real(dp), allocatable :: denseOver(:,:)
+  ! real(dp), allocatable :: denseOver(:,:)
+    real(dp), dimension(:,:), pointer :: denseOver
 
     ! sparse matrix, charge-independent Hamiltonian
     real(dp), allocatable :: denseH0(:,:)
@@ -69,10 +71,12 @@ module dftbp_fmo
     real(dp), allocatable :: eigVal(:)
 
     ! charge per atom (mOrb, atom, spin channel); spin channel == 1
-    real(dp), allocatable :: qInput(:,:,:)
+  ! real(dp), allocatable :: qInput(:,:,:)
+    real(dp), dimension(:,:,:), pointer :: qInput
 
     ! charge per atomic shell (shell, atom, spin channel); spin channel == 1
-    real(dp), allocatable :: chargePerShell(:,:,:)
+  ! real(dp), allocatable :: chargePerShell(:,:,:)
+    real(dp), dimension(:,:,:), pointer :: chargePerShell
 
     ! an entry for gradients?
 
@@ -209,13 +213,17 @@ contains
       this%qInput(:,iAtomBeg:iAtomEnd,1) = ptrsPhase1(iSite)%qInput(:,:,1)
     end do
 
-    ! GET SHELL CHARGES FROM THE INDIVIDUAL FRAGMENTS / SITES
-    call getChargePerShell(this%qInput, this%orb, this%species, this%chargePerShell)
+    if (this%tSccCalc) then
 
-    call addChargePotentials(env, this%sccCalc, this%qInput, this%q0, this%chargePerShell,&
-        & this%orb, this%species, this%neighbourList, this%img2CentCell, this%spinW,&
-        & this%solvation, this%thirdOrd, this%potential, this%electrostatics, this%tPoisson,&
-        & this%tUpload, this%shiftPerLUp, this%dispersion)
+      ! GET SHELL CHARGES FROM THE INDIVIDUAL FRAGMENTS / SITES
+      call getChargePerShell(this%qInput, this%orb, this%species, this%chargePerShell)
+
+      call addChargePotentials(env, this%sccCalc, this%qInput, this%q0, this%chargePerShell,&
+          & this%orb, this%species, this%neighbourList, this%img2CentCell, this%spinW,&
+          & this%solvation, this%thirdOrd, this%potential, this%electrostatics, this%tPoisson,&
+          & this%tUpload, this%shiftPerLUp, this%dispersion)
+
+    end if
 
     ! All potentials are added up into intBlock
     this%potential%intBlock = this%potential%intBlock + this%potential%extBlock
@@ -285,6 +293,21 @@ contains
 !         & this%intPressure, this%geoOutFile, this%iAtInCentralRegion)
 !   end if
 
+    ! fill the other triangle of both matrices
+    do iAO = 2, this%nOrb
+      do jAO = 1, iAO
+        HSqrReal(jAO,iAO) = HSqrReal(iAO,jAO)
+        SSqrReal(jAO,iAO) = SSqrReal(iAO,jAO)
+      end do
+    end do
+
+  ! ! debug
+  ! write (*,*) "HAMILTONIAN"
+  ! write (*,'(198F8.4)') HSqrReal
+  ! write (*,*) "OVERLAP"
+  ! write (*,'(198F8.4)') SSqrReal
+  ! write (*,*) "END MATRICES"
+
     ! CALCULATE THE FMO HAMILTONIAN AND OVERLAP
     allocate(Tij(nFO,nFO))
     allocate(Sij(nFO,nFO))
@@ -304,13 +327,17 @@ contains
             do iAO = 1, ptrsPhase1(iSite)%nOrb ! iSiteOrbStart(iSite), iSiteOrbStart(iSite+1)-1
               do jAO = 1, ptrsPhase1(jSite)%nOrb ! iSiteOrbStart(jSite), iSiteOrbStart(jSite+1)-1
                 Tij(iFO,jFO) = Tij(iFO,jFO)&
-                    & + ptrsPhase1(iSite)%eigVec(iAO,iSiteOrbStart(iSite)+ptrsPhase1(iSite)%iHOMO-iOrb)&
+                  ! & + ptrsPhase1(iSite)%eigVec(iAO,iSiteOrbStart(iSite)+ptrsPhase1(iSite)%iHOMO-iOrb)&
+                    & + ptrsPhase1(iSite)%eigVec(iAO,ptrsPhase1(iSite)%iHOMO+1-iOrb)&
                     & * HSqrReal(iSiteOrbStart(iSite)+iAO-1,iSiteOrbStart(jSite)+jAO-1)&
-                    & * ptrsPhase1(jSite)%eigVec(jAO,iSiteOrbStart(jSite)+ptrsPhase1(jSite)%iHOMO-jOrb)
+                  ! & * ptrsPhase1(jSite)%eigVec(jAO,iSiteOrbStart(jSite)+ptrsPhase1(jSite)%iHOMO-jOrb)
+                    & * ptrsPhase1(jSite)%eigVec(jAO,ptrsPhase1(jSite)%iHOMO+1-jOrb)
                 Sij(iFO,jFO) = Sij(iFO,jFO)&
-                    & + ptrsPhase1(iSite)%eigVec(iAO,iSiteOrbStart(iSite)+ptrsPhase1(iSite)%iHOMO-iOrb)&
+                  ! & + ptrsPhase1(iSite)%eigVec(iAO,iSiteOrbStart(iSite)+ptrsPhase1(iSite)%iHOMO-iOrb)&
+                    & + ptrsPhase1(iSite)%eigVec(iAO,ptrsPhase1(iSite)%iHOMO+1-iOrb)&
                     & * SSqrReal(iSiteOrbStart(iSite)+iAO-1,iSiteOrbStart(jSite)+jAO-1)&
-                    & * ptrsPhase1(jSite)%eigVec(jAO,iSiteOrbStart(jSite)+ptrsPhase1(jSite)%iHOMO-jOrb)
+                  ! & * ptrsPhase1(jSite)%eigVec(jAO,iSiteOrbStart(jSite)+ptrsPhase1(jSite)%iHOMO-jOrb)
+                    & * ptrsPhase1(jSite)%eigVec(jAO,ptrsPhase1(jSite)%iHOMO+1-jOrb)
               end do
             end do
           end do ! jOrb
@@ -325,19 +352,44 @@ contains
         Sij(jFO,iFO) = Sij(iFO,jFO)
       end do
     end do
+
+    ! debug
+    write (*,*) 'EIGENVALUES'
+    do iSite = 1, nSite
+      write (*,*) 'SITE ', iSite
+      write (*,'(6F8.4)') (ptrsPhase1(iSite)%eigVal(ptrsPhase1(iSite)%iHOMO + iFO), iFO = -2, 3)
+    end do
         
+    write (*, *) 'Hamiltonian before putting eigenvalues from phase1'
+    write (*,'(3F9.5)') Tij
+    write (*, *) 'corresponding overlap before putting unity to the diagonal'
+    write (*,'(3F9.5)') Sij
+
     ! PUT THE EIGENVALUES FROM PHASE 1 TO THE DIAGONAL
     iFO = 0
     do iSite = 1, nSite
       do iOrb = 1, ptrsPhase1(iSite)%nFO
         iFO = iFO + 1
         Tij(iFO,iFO) = ptrsPhase1(iSite)%eigVal(ptrsPhase1(iSite)%iHOMO + 1 - iOrb)
+        Sij(iFO,iFO) = 1._dp
       end do
     end do
 
+    write (*, *) 'Hamiltonian before orthogonalization'
+    write (*,'(3F9.5)') Tij
+    write (*, *) 'corresponding overlap'
+    write (*,'(3F9.5)') Sij
+
     ! ORTHOGONALIZE THE FMO HAMILTONIAN
-    allocate(TijOrtho(nFO,nFO))
     call orthogonalizeHamiltonian(nFO, Tij, Sij, TijOrtho)
+
+    deallocate(Tij)
+    deallocate(Sij)
+
+    write (*, *) 'Hamiltonian after orthogonalization'
+    write (*,'(3F9.5)') TijOrtho
+    write (*, *) 'Hamiltonian after orthogonalization -- in eV'
+    write (*,'(3F9.5)') TijOrtho * Hartree__eV
 
   end subroutine processGeometryPhase2
 
@@ -388,9 +440,12 @@ contains
     deallocate(iwork)
 
     ! Sij = evec * sqrt(diag) * evec-transp
-    allocate(sqrt_eval(1,n))
-    sqrt_eval(1,:) = sqrt(eval(:))
-    sij = matmul(evec, matmul(sqrt_eval,transpose(evec)))
+    allocate(sqrt_eval(n,n))
+    sqrt_eval(:,:) = 0._dp
+    do i = 1, n
+      sqrt_eval(i,i) = sqrt(eval(i))
+    end do
+    sij = matmul(matmul(evec, sqrt_eval), transpose(evec))
     deallocate(sqrt_eval)
     deallocate(evec)
     deallocate(eval)

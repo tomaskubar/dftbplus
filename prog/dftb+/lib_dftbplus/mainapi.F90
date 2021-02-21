@@ -28,6 +28,7 @@ module dftbp_mainapi
 #:endif
   use dftbp_wrappedintr, only : TWrappedInt1
   use dftbp_charmanip, only : newline
+  use dftbp_fmo, only : TPointersToPhase1, processGeometryPhase2
   implicit none
   private
 
@@ -36,6 +37,7 @@ module dftbp_mainapi
   public :: nrOfAtoms, getAtomicMasses
   public :: updateDataDependentOnSpeciesOrdering, checkSpeciesNames
   public :: nrOfOrbitals, getEigenValues, getEigenVectors, getHamilOverl
+  public :: getFragmentBasedHamiltonian
 
 
 contains
@@ -642,5 +644,34 @@ contains
     end if
 
   end subroutine recalcGeometry
+
+
+  !> Returns the Hamiltonian matrix in the FMO basis
+  !> This invokes a DFTB phase 2 calculation
+  subroutine getFragmentBasedHamiltonian(env, main, nSite, ptrsPhase1, TijOrtho)
+
+    !> Instance
+    type(TEnvironment), intent(inout) :: env
+
+    !> Instance
+    type(TDftbPlusMain), intent(inout) :: main
+
+    !> Number of sites / fragments
+    integer, intent(in) :: nSite
+
+    !> Array of structures containing pointers to data structures in phase1
+    type(TPointersToPhase1), allocatable, intent(in) :: ptrsPhase1(:)
+
+    !> Orthogonalized FMO Hamiltonian
+    real(dp), allocatable, intent(out) :: TijOrtho(:,:)
+
+
+    if (main%tLatticeChanged .or. main%tCoordsChanged) then
+      call processGeometryPhase2(main, env, nSite, ptrsPhase1, TijOrtho)
+      main%tLatticeChanged = .false.
+      main%tCoordsChanged = .false.
+    end if
+
+  end subroutine getFragmentBasedHamiltonian
 
 end module dftbp_mainapi

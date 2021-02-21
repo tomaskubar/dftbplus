@@ -15,6 +15,7 @@ module dftbp_capi
       & TDftbPlus, TDftbPlus_init, TDftbPlus_destruct, TDftbPlusInput, TDftbPlusAtomList
   use dftbp_qdepextpotgenc, only :&
       & getExtPotIfaceC, getExtPotGradIfaceC, TQDepExtPotGenC, TQDepExtPotGenC_init
+  use dftbp_fmo, only : TPointersToPhase1
   implicit none
   private
 
@@ -32,6 +33,11 @@ module dftbp_capi
   type, bind(C) :: c_DftbPlus
     type(c_ptr) :: instance
   end type c_DftbPlus
+
+  !> Pointers to data from phase 1 FMO-DFTB calculation
+  type, bind(C) :: c_PointerToPhase1
+    type(c_ptr) :: instance
+  end type c_PointerToPhase1
 
 
   !> Simple extension around the TDftbPlus with some additional variables for the C-API.
@@ -298,10 +304,13 @@ contains
     real(c_double), intent(in) :: coords(3,*)
 
     type(TDftbPlusC), pointer :: instance
-    integer :: nAtom
+    integer :: nAtom, iAtom
 
     call c_f_pointer(handler%instance, instance)
     nAtom = instance%nrOfAtoms()
+    do iAtom = 1, nAtom
+       write(*, *) coords(:,iAtom)
+    end do
     call instance%setGeometry(coords(:, 1:nAtom))
 
   end subroutine c_DftbPlus_setCoords
@@ -518,6 +527,119 @@ contains
     call instance%getHamilOverl(hamil(1:nOrb,1:nOrb), overl(1:nOrb,1:nOrb))
 
   end subroutine c_DftbPlus_getHamilOverl
+
+
+  !> Obtain the pointers to DFTB+ data (phase 1 of the FMO calculation)
+  subroutine c_DftbPlus_getPointersToPhase1(handler, ptrsPhase1)&
+      & bind(C, name='dftbp_get_pointers_phase1')
+
+    !> handler for the calculation
+    type(c_DftbPlus), intent(inout) :: handler
+
+    !> returned pointer to phase 1 data structure
+    type(c_PointerToPhase1), intent(out) :: ptrsPhase1
+
+    type(TDftbPlusC), pointer :: instance
+    type(TPointersToPhase1), pointer :: phase1
+
+    call c_f_pointer(handler%instance, instance)
+    allocate(phase1)
+
+    ! COPY THE DATA
+    call instance%getPointersToPhase1(phase1)
+
+    ptrsPhase1%instance = c_loc(phase1)
+
+  end subroutine c_DftbPlus_getPointersToPhase1
+
+
+  !> Set the number of sites for DFTB phase 2 calculation
+  subroutine c_DftbPlus_initPointersToPhase1(handler, nSiteC)&
+      & bind(C, name='dftbp_init_pointers_phase1')
+
+    !> handler for the calculation
+    type(c_DftbPlus), intent(inout) :: handler
+
+    !> number of sites / fragments for FMO
+    integer(c_int), intent(in) :: nSiteC
+
+    type(TDftbPlusC), pointer :: instance
+    integer :: nSite
+
+    call c_f_pointer(handler%instance, instance)
+    nSite = nSiteC
+    call instance%initPointersToPhase1(nSite)
+
+  end subroutine c_DftbPlus_initPointersToPhase1
+
+
+  !> This is called before starting the phase 2 of the FMO calculation:
+  !> Set the pointers to data from the phase 1 of the FMO DFTB+ calculation
+  subroutine c_DftbPlus_setPointersToPhase1(handler, iSiteC, ptrsPhase1, nFOc, iHOMOc)&
+      & bind(C, name='dftbp_set_pointers_phase1')
+
+    !> handler for the calculation
+    type(c_DftbPlus), intent(inout) :: handler
+
+    !> ordinal number of the site / fragment
+    integer(c_int), intent(in) :: iSiteC
+
+    !> pointer to phase 1 data structure
+    type(c_PointerToPhase1), intent(in) :: ptrsPhase1
+
+    !> communicated from Gromacs: number of fragment orbitals to be considered
+    integer(c_int), intent(in) :: nFOc
+
+    !> communicated from Gromacs: index of HOMO in the array of orbitals
+    integer(c_int), intent(in) :: iHOMOc
+
+    type(TDftbPlusC), pointer :: instance
+    type(TPointersToPhase1), pointer :: phase1
+    integer :: iSite, nFO, iHOMO
+
+    call c_f_pointer(handler%instance, instance)
+    call c_f_pointer(ptrsPhase1%instance, phase1)
+    iSite = iSiteC + 1 ! C-arrays start at 0 but Fortran-arrays start at 1
+    nFO = nFOc
+    iHOMO = iHOMOc
+
+    ! COPY THE DATA
+
+  ! call instance%setPointersToPhase1(iSite, phase1%nAtom, phase1%nOrb, phase1%nFO, phase1%iHOMO,&
+  !     & phase1%denseOver, phase1%denseH0, phase1%eigVec, phase1%eigVal, phase1%qInput,&
+  !     & phase1%chargePerShell)
+    call instance%setPointersToPhase1(iSite, phase1, nFO, iHOMO)
+
+  end subroutine c_DftbPlus_setPointersToPhase1
+
+
+  !> Run phase 2 of the DFTB FMO calculation
+  subroutine c_DftbPlus_getFragmentBasedHamiltonian(handler, nFOc, TijOrthoC)&
+      & bind(C, name='dftbp_get_fmo_hamiltonian')
+
+    !> handler for the calculation
+    type(c_DftbPlus), intent(inout) :: handler
+
+    !> number of FMO orbitals (dimension of the resulting Hamiltonian)
+    integer(c_int), intent(in) :: nFOc
+
+    !> resulting FMO Hamiltonian matrix
+    real(c_double), dimension(nFOc,nFOc), intent(out) :: TijOrthoC
+
+    type(TDftbPlusC), pointer :: instance
+    integer :: nFO
+    real(dp), allocatable :: TijOrtho(:,:)
+
+    call c_f_pointer(handler%instance, instance)
+    nFO = nFOc
+    allocate(TijOrtho(nFO,nFO))
+    call instance%getFragmentBasedHamiltonian(TijOrtho)
+    write (*,*) 'TijOrthoC', shape(TijOrthoC)
+    write (*,*) 'TijOrtho ', shape(TijOrtho)
+    TijOrthoC(:,:) = TijOrtho
+    deallocate(TijOrtho)
+
+  end subroutine c_DftbPlus_getFragmentBasedHamiltonian
 
 
   !> Converts a 0-char terminated C-type string into a Fortran string.

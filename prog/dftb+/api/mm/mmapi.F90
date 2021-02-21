@@ -25,6 +25,8 @@ module dftbp_mmapi
   use dftbp_qdepextpotproxy, only : TQDepExtPotProxy, TQDepExtPotProxy_init
   use dftbp_charmanip, only : newline
   use dftbp_initprogram, only: TDftbPlusMain
+  use dftbp_fmo, only : TPointersToPhase1
+  use dftbp_sparse2dense, only : unpackHS
   implicit none
   private
 
@@ -34,6 +36,7 @@ module dftbp_mmapi
   public :: TDftbPlusInput
   public :: TQDepExtPotGen
   public :: getMaxAngFromSlakoFile, convertAtomTypesToSpecies
+! public :: getPointersToPhase1, initPointersToPhase1, setPointersToPhase1
 
 
   !> list of QM atoms and species for DFTB+ calculation
@@ -67,6 +70,8 @@ module dftbp_mmapi
     private
     type(TEnvironment), allocatable :: env
     type(TDftbPlusMain), allocatable :: main
+    integer :: nSite
+    type(TPointersToPhase1), allocatable :: ptrsPhase1(:)
     logical :: tInit = .false.
   contains
     !> read input from a file
@@ -111,6 +116,14 @@ module dftbp_mmapi
     procedure :: getEigenVectors => TDftbPlus_getEigenVectors
     !> get the DFTB+ hamiltonian and overlap matrices
     procedure :: getHamilOverl => TDftbPlus_getHamilOverl
+    !> get pointers to phase 1 of the DFTB-FMO calculation
+    procedure :: getPointersToPhase1 => TDftbPlus_getPointersToPhase1
+    !> init pointers to phase 1 of the DFTB-FMO calculation
+    procedure :: initPointersToPhase1 => TDftbPlus_initPointersToPhase1
+    !> set pointers to phase 1 of the DFTB-FMO calculation
+    procedure :: setPointersToPhase1 => TDftbPlus_setPointersToPhase1
+    !> run the phase 2 of the DFTB-FMO calculation, and get the Hamiltonian in FMO basis set
+    procedure :: getFragmentBasedHamiltonian => TDftbPlus_getFragmentBasedHamiltonian
   end type TDftbPlus
 
 
@@ -743,5 +756,170 @@ contains
     call getHamilOverl(this%env, this%main, hamil, overl)
 
   end subroutine TDftbPlus_getHamilOverl
+
+
+  !> This is called before after finishing the phase 2 of the FMO calculation:
+  !> Get the pointers to data from the phase 1 of the FMO DFTB+ calculation
+  subroutine TDftbPlus_getPointersToPhase1(this, ptrsPhase1)
+
+    !> Instance.
+    class(TDftbPlus), intent(inout), target :: this
+
+    !> Structure to store the data into
+    type(TPointersToPhase1), intent(out) :: ptrsPhase1
+
+    ! number of atoms
+    ptrsPhase1%nAtom = this%main%nAtom
+
+    ! number of orbitals
+    ptrsPhase1%nOrb = this%main%nOrb
+
+    ! sparse matrix, overlap
+  ! ptrsPhase1%denseOver = this%main%SSqrReal
+    ptrsPhase1%denseOver => this%main%SSqrReal
+
+    ! sparse matrix, charge-independent Hamiltonian
+    allocate(ptrsPhase1%denseH0(this%main%nOrb,this%main%nOrb))
+    call unpackHS(ptrsPhase1%denseH0, this%main%H0, this%main%neighbourList%iNeighbour,&
+        & this%main%nNeighbourSK, this%main%denseDesc%iAtomStart, this%main%iSparseStart,&
+        & this%main%img2CentCell)
+
+    ! dense matrix, eigenvectors
+    ptrsPhase1%eigVec = this%main%eigVecsReal(:,:,1)
+
+    ! 1D array, eigenvalues (orbital energies)
+    ptrsPhase1%eigVal = this%main%eigen(:,1,1)
+
+    ! charge per atom (mOrb, atom, spin channel); spin channel == 1
+  ! ptrsPhase1%qInput(:,:,:) = this%main%qOutput
+    ptrsPhase1%qInput => this%main%qOutput
+
+    ! charge per atomic shell (shell, atom, spin channel); spin channel == 1
+  ! ptrsPhase1%chargePerShell(:,:,:) = this%main%chargePerShell
+    ptrsPhase1%chargePerShell => this%main%chargePerShell
+
+  end subroutine TDftbPlus_getPointersToPhase1
+
+
+  !> Sets the number of sites for DFTB phase 2 calculation
+  subroutine TDftbPlus_initPointersToPhase1(this, nSite)
+
+    !> Instance.
+    class(TDftbPlus), intent(inout) :: this
+
+    !> Number of sites / fragments for FMO
+    integer :: nSite
+
+    call this%checkInit()
+
+    this%nSite = nSite
+    if (allocated(this%ptrsPhase1)) then
+      deallocate(this%ptrsPhase1)
+    end if
+    allocate(this%ptrsPhase1(nSite))
+
+  end subroutine TDftbPlus_initPointersToPhase1
+
+
+  !> This is called before starting the phase 2 of the FMO calculation:
+  !> Set the pointers to data from the phase 1 of the FMO DFTB+ calculation
+ !subroutine TDftbPlus_setPointersToPhase1(this, iSite, nAtom, nOrb, nFO, iHOMO, denseOver,&
+ !    & denseH0, eigVec, eigVal, qInput, chargePerShell)
+  subroutine TDftbPlus_setPointersToPhase1(this, iSite, ptrsPhase1, nFO, iHOMO)
+
+    !> Instance.
+    class(TDftbPlus), intent(inout) :: this
+
+    !> Which site? (index into the array of TPointersToPhase1)
+    integer, intent(in) :: iSite
+
+    !> Structure to copy the data from
+    type(TPointersToPhase1), intent(in) :: ptrsPhase1
+
+  ! ! number of atoms
+  ! integer, intent(in) :: nAtom
+
+  ! ! number of orbitals
+  ! integer, intent(in) :: nOrb
+
+    ! number of frontier / fragment orbitals to consider
+    integer, intent(in) :: nFO
+
+    ! which orbital is HOMO/LUMO?
+    integer, intent(in) :: iHOMO
+
+  ! ! sparse matrix, overlap
+  ! real(dp), allocatable, intent(in) :: denseOver(:,:)
+
+  ! ! sparse matrix, charge-independent Hamiltonian
+  ! real(dp), allocatable, intent(in) :: denseH0(:,:)
+
+  ! ! dense matrix, eigenvectors
+  ! real(dp), allocatable, intent(in) :: eigVec(:,:)
+
+  ! ! 1D array, eigenvalues (orbital energies)
+  ! real(dp), allocatable, intent(in) :: eigVal(:)
+
+  ! ! charge per atom (mOrb, atom, spin channel); spin channel == 1
+  ! real(dp), allocatable, intent(in) :: qInput(:,:,:)
+
+  ! ! charge per atomic shell (shell, atom, spin channel); spin channel == 1
+  ! real(dp), allocatable, intent(in) :: chargePerShell(:,:,:)
+
+    call this%checkInit()
+
+    this%ptrsPhase1(iSite) = ptrsPhase1
+
+  ! ! number of atoms
+  ! this%ptrsPhase1(iSite)%nAtom = nAtom
+
+  ! ! number of orbitals
+  ! this%ptrsPhase1(iSite)%nOrb = nOrb
+
+  ! ! number of frontier / fragment orbitals to consider
+  ! this%ptrsPhase1(iSite)%nFO = nFO
+
+  ! ! which orbital is HOMO/LUMO?
+  ! this%ptrsPhase1(iSite)%iHOMO = iHOMO
+
+  ! ! sparse matrix, overlap
+  ! this%ptrsPhase1(iSite)%denseOver = denseOver
+
+  ! ! sparse matrix, charge-independent Hamiltonian
+  ! this%ptrsPhase1(iSite)%denseH0 = denseH0
+
+  ! ! dense matrix, eigenvectors
+  ! this%ptrsPhase1(iSite)%eigVec = eigVec
+
+  ! ! 1D array, eigenvalues (orbital energies)
+  ! this%ptrsPhase1(iSite)%eigVal = eigVal
+
+  ! ! charge per atom (mOrb, atom, spin channel); spin channel == 1
+  ! this%ptrsPhase1(iSite)%qInput = qInput
+
+  ! ! charge per atomic shell (shell, atom, spin channel); spin channel == 1
+  ! this%ptrsPhase1(iSite)%chargePerShell = chargePerShell
+
+    this%ptrsPhase1(iSite)%nFO = nFO
+    this%ptrsPhase1(iSite)%iHOMO = iHOMO
+
+  end subroutine TDftbPlus_setPointersToPhase1
+
+
+  !> Returns the Hamiltonian matrix in the FMO basis
+  !> This invokes a DFTB phase 2 calculation
+  subroutine TDftbPlus_getFragmentBasedHamiltonian(this, TijOrtho)
+
+    !> Instance.
+    class(TDftbPlus), intent(inout) :: this
+
+    !> Mermin free energy.
+    real(dp), allocatable, intent(out) :: TijOrtho(:,:)
+
+    call this%checkInit()
+
+    call getFragmentBasedHamiltonian(this%env, this%main, this%nSite, this%ptrsPhase1, TijOrtho)
+
+  end subroutine TDftbPlus_getFragmentBasedHamiltonian
 
 end module dftbp_mmapi

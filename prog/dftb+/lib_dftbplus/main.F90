@@ -113,7 +113,7 @@ module dftbp_main
   public :: processGeometry
 
   ! used in the API
-  public :: buildDenseRealHam
+  public :: buildDenseRealHam, handleCoordinateChange
 
   !> O(N^2) density matrix creation
   logical, parameter :: tDensON2 = .false.
