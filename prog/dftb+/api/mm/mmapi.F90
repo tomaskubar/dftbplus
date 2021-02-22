@@ -340,7 +340,7 @@ contains
 
 
   !> Sets up the calculator using a given input.
-  subroutine TDftbPlus_setupCalculator(this, input, atomList)
+  subroutine TDftbPlus_setupCalculator(this, input, atomList, outFileNameStub)
 
     !> Instance.
     class(TDftbPlus), intent(inout) :: this
@@ -350,6 +350,9 @@ contains
 
     !> List of atoms and species
     type(TDftbPlusAtomList), intent(inout), optional :: atomList
+
+    !> List of atoms and species
+    character(len=*), intent(in), optional :: outFileNameStub
 
     type(TParserFlags) :: parserFlags
     type(TInputData) :: inpData
@@ -361,7 +364,7 @@ contains
     end if
     call parseHsdTree(input%hsdTree, inpData, parserFlags)
     call doPostParseJobs(input%hsdTree, parserFlags)
-    call this%main%initProgramVariables(inpData, this%env)
+    call this%main%initProgramVariables(inpData, this%env, outFileNameStub)
 
   end subroutine TDftbPlus_setupCalculator
 

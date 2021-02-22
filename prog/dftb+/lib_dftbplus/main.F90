@@ -217,7 +217,7 @@ contains
           & this%tripletStress, this%mixedStress, this%derivs, this%tripletderivs, this%mixedderivs)
 
       if (this%tWriteDetailedOut .and. this%deltaDftb%nDeterminant() > 1) then
-        call writeDetailedOut2Dets(this%fdDetailedOut, userOut, tAppendDetailedOut,&
+        call writeDetailedOut2Dets(this%fdDetailedOut, this%userOut, tAppendDetailedOut,&
             & this%dftbEnergy, this%electronicSolver, this%deltaDftb, this%q0, this%orb,&
             & this%qOutput, this%qDets, this%qBlockDets, this%species, this%iAtInCentralRegion,&
             & this%tPrintMulliken, this%cm5Cont)
@@ -681,7 +681,7 @@ contains
     ! For non-scc calculations with transport only, jump out of geometry loop
     if (this%electronicSolver%iSolver == electronicSolverTypes%OnlyTransport) then
       if (this%tWriteDetailedOut) then
-        call openDetailedOut(this%fdDetailedOut, userOut, tAppendDetailedOut)
+        call openDetailedOut(this%fdDetailedOut, this%userOut, tAppendDetailedOut)
       end if
       ! We need to define hamltonian by adding the potential
       call getSccHamiltonian(this%H0, this%over, this%nNeighbourSK, this%neighbourList,&
@@ -793,7 +793,7 @@ contains
             ! In this routine the correct Etotal is evaluated.
             ! If TargetStateL > 0, certain microstate
             ! is optimized. If not, SSR state is optimized.
-            call openDetailedOut(this%fdDetailedOut, userOut, tAppendDetailedOut)
+            call openDetailedOut(this%fdDetailedOut, this%userOut, tAppendDetailedOut)
             call writeReksDetailedOut1(this%fdDetailedOut, this%nGeoSteps, iGeoStep, this%tMD,&
                 & this%tDerivs, this%tCoordOpt, this%tLatOpt, iLatGeoStep, iSccIter,&
                 & this%dftbEnergy(1), diffElec, sccErrorQ, this%indMovedAtom, this%pCoord0Out,&
@@ -804,7 +804,7 @@ contains
                 & allocated(this%thirdOrd), this%isRangeSep)
           end if
           if (this%tWriteBandDat) then
-            call writeBandOut(bandOut, this%eigen, this%filling, this%kWeight)
+            call writeBandOut(this%bandOut, this%eigen, this%filling, this%kWeight)
           end if
 
           exit lpSCC_REKS
@@ -906,7 +906,7 @@ contains
         end if
 
         if (this%tWriteBandDat .and. this%deltaDftb%nDeterminant() == 1) then
-          call writeBandOut(bandOut, this%eigen, this%filling, this%kWeight)
+          call writeBandOut(this%bandOut, this%eigen, this%filling, this%kWeight)
         end if
 
         if (this%tMulliken) then
@@ -1020,7 +1020,7 @@ contains
         call sumEnergies(this%dftbEnergy(this%deltaDftb%iDeterminant))
 
         if (this%tWriteDetailedOut .and. this%deltaDftb%nDeterminant() == 1) then
-          call openDetailedOut(this%fdDetailedOut, userOut, tAppendDetailedOut)
+          call openDetailedOut(this%fdDetailedOut, this%userOut, tAppendDetailedOut)
           call writeDetailedOut1(this%fdDetailedOut, this%iDistribFn, this%nGeoSteps, iGeoStep,&
               & this%tMD, this%tDerivs, this%tCoordOpt, this%tLatOpt, iLatGeoStep, iSccIter,&
               & this%dftbEnergy(this%deltaDftb%iDeterminant), diffElec, sccErrorQ,&
@@ -1063,7 +1063,7 @@ contains
 
     if (this%tWriteDetailedOut .and. this%deltaDftb%nDeterminant() == 1) then
       close(this%fdDetailedOut)
-      call openDetailedOut(this%fdDetailedOut, userOut, tAppendDetailedOut)
+      call openDetailedOut(this%fdDetailedOut, this%userOut, tAppendDetailedOut)
       if (allocated(this%reks)) then
         call writeReksDetailedOut1(this%fdDetailedOut, this%nGeoSteps, iGeoStep, this%tMD,&
             & this%tDerivs, this%tCoordOpt, this%tLatOpt, iLatGeoStep, iSccIter,&

@@ -131,10 +131,10 @@ module dftbp_initprogram
   character(*), parameter :: autotestTag = "autotest.tag"
 
   !> Detailed user output
-  character(*), parameter :: userOut = "detailed.out"
+  character(*), parameter :: userOutBase = "_detailed.out"
 
   !> band structure and filling information
-  character(*), parameter :: bandOut = "band.out"
+  character(*), parameter :: bandOutBase = "_band.out"
 
   !> File accumulating data during an MD run
   character(*), parameter :: mdOut = "md.out"
@@ -1038,6 +1038,12 @@ module dftbp_initprogram
     !> atomic charge contribution in excited state
     real(dp), allocatable :: dQAtomEx(:)
 
+    !> Dynamic user output file name
+    character(len = 100) :: userOut
+
+    !> Dynamic file name for band structure and filling information
+    character(len = 100) :: bandOut
+
   contains
 
     procedure :: initProgramVariables
@@ -1071,7 +1077,7 @@ contains
 
 
   !> Initializes the variables in the module based on the parsed input
-  subroutine initProgramVariables(this, input, env)
+  subroutine initProgramVariables(this, input, env, outFileNameStub)
 
     !> Instance
     class(TDftbPlusMain), intent(inout), target :: this
@@ -1081,6 +1087,9 @@ contains
 
     !> Environment settings
     type(TEnvironment), intent(inout) :: env
+
+    !> Output file name stub
+    character(len=*), intent(in), optional :: outFileNameStub
 
     ! Mixer related local variables
     integer :: nGeneration
@@ -2585,7 +2594,11 @@ contains
     end if
 
     if (env%tGlobalLead) then
-      call this%initOutputFiles(env)
+      if (present(outFileNameStub)) then
+        call this%initOutputFiles(env, outFileNameStub)
+      else
+        call this%initOutputFiles(env)
+      end if
     end if
 
     if (this%tPoisson) then
@@ -4191,13 +4204,16 @@ contains
 #:endif
 
   !> Initialises (clears) output files.
-  subroutine initOutputFiles(this, env)
+  subroutine initOutputFiles(this, env, outFileNameStub)
 
     !> Instance
     class(TDftbPlusMain), intent(inout) :: this
 
     !> Environment
     type(TEnvironment), intent(inout) :: env
+
+    !> Output file name stub
+    character(len=*), intent(in), optional :: outFileNameStub
 
 
     call TTaggedWriter_init(this%taggedWriter)
@@ -4209,13 +4225,23 @@ contains
       call initOutputFile(resultsTag)
     end if
     if (this%tWriteBandDat) then
-      call initOutputFile(bandOut)
+      if (present(outFileNameStub)) then
+        this%bandOut = trim(outFileNameStub) // bandOutBase
+      else
+        this%bandOut = bandOutBase
+      end if
+      call initOutputFile(this%bandOut)
     end if
     if (this%tDerivs) then
       call initOutputFile(hessianOut)
     end if
     if (this%tWriteDetailedOut) then
-      call initOutputFile(userOut, this%fdDetailedOut)
+      if (present(outFileNameStub)) then
+        this%userOut =  trim(outFileNameStub) // userOutBase
+      else
+        this%userOut = userOutBase
+      end if
+      call initOutputFile(this%userOut, this%fdDetailedOut)
       call env%fileFinalizer%register(this%fdDetailedOut)
     end if
     if (this%tMD) then

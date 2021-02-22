@@ -206,7 +206,7 @@ contains
 
 
   !> process a document tree to get settings for the calculation
-  subroutine c_DftbPlus_processInput(handler, inputHandler, atomListHandler)&
+  subroutine c_DftbPlus_processInput(handler, inputHandler, atomListHandler, auxFileNameStub)&
       & bind(C, name='dftbp_process_input')
 
     !> handler for the calculation instance
@@ -218,15 +218,24 @@ contains
     !> atom list structure handler
     type(c_DftbPlusAtomList), intent(inout) :: atomListHandler
 
+    !> auxiliary output file name stub
+    character(c_char), intent(in), optional :: auxFileNameStub(*)
+
     type(TDftbPlusC), pointer :: instance
     type(TDftbPlusInput), pointer :: pDftbPlusInput
     type(TDftbPlusAtomList), pointer :: pDftbPlusAtomList
+    character(:), allocatable :: fortranFileNameStub
 
     call c_f_pointer(handler%instance, instance)
     call c_f_pointer(inputHandler%pDftbPlusInput, pDftbPlusInput)
     if (c_associated(atomListHandler%pDftbPlusAtomList)) then
       call c_f_pointer(atomListHandler%pDftbPlusAtomList, pDftbPlusAtomList)
-      call instance%setupCalculator(pDftbPlusInput, pDftbPlusAtomList)
+      if (present(auxFileNameStub)) then
+        fortranFileNameStub = fortranChar(auxFileNameStub)
+        call instance%setupCalculator(pDftbPlusInput, pDftbPlusAtomList, fortranFileNameStub)
+      else
+        call instance%setupCalculator(pDftbPlusInput, pDftbPlusAtomList)
+      end if
     else
       call instance%setupCalculator(pDftbPlusInput)
     end if
