@@ -58,8 +58,8 @@ module dftbp_fmo
     integer :: iHOMO
 
     ! sparse matrix, overlap
-  ! real(dp), allocatable :: denseOver(:,:)
-    real(dp), dimension(:,:), pointer :: denseOver
+    real(dp), allocatable :: denseOver(:,:)
+  ! real(dp), dimension(:,:), pointer :: denseOver
 
     ! sparse matrix, charge-independent Hamiltonian
     real(dp), allocatable :: denseH0(:,:)
@@ -160,6 +160,11 @@ contains
         & this%neighbourList%iNeighbour, this%species, this%iSparseStart, this%orb)
     call env%globalTimer%stopTimer(globalTimers%sparseH0S)
 
+  ! write (*,*) "SPARSE HAMILTONIAN POINT 0"
+  ! write (*,'(14F8.4)') this%H0(1:14)
+  ! write (*,*) "SPARSE OVERLAP POINT 0"
+  ! write (*,'(14F8.4)') this%over(1:14)
+
     ! CHARGE-INDEPENDENT MATRICES -- CONVERT TO DENSE
     allocate(HSqrReal(this%nOrb,this%nOrb))
     allocate(SSqrReal(this%nOrb,this%nOrb))
@@ -167,6 +172,13 @@ contains
         & this%denseDesc%iAtomStart, this%iSparseStart, this%img2CentCell)
     call unpackHS(SSqrReal, this%over, this%neighbourList%iNeighbour, this%nNeighbourSK,&
         & this%denseDesc%iAtomStart, this%iSparseStart, this%img2CentCell)
+
+    ! debug
+  ! write (*,*) "HAMILTONIAN - STAGE 0"
+  ! write (*,'(36F8.4)') HSqrReal
+  ! write (*,*) "OVERLAP - STAGE 0"
+  ! write (*,'(36F8.4)') SSqrReal
+  ! write (*,*) "END STAGE 0"
 
     ! CHARGE-INDEPENDENT MATRICES -- INSERT DIAGONAL BLOCKS FROM PHASE 1
     do iSite = 1, nSite
@@ -176,11 +188,25 @@ contains
       SSqrReal(iOrbBeg:iOrbEnd,iOrbBeg:iOrbEnd) = ptrsPhase1(iSite)%denseOver(:,:)
     end do
 
+    ! debug
+  ! write (*,*) "HAMILTONIAN - STAGE 1"
+  ! write (*,'(36F8.4)') HSqrReal
+  ! write (*,*) "OVERLAP - STAGE 1"
+  ! write (*,'(36F8.4)') SSqrReal
+  ! write (*,*) "END STAGE 1"
+
     ! CHARGE-INDEPENDENT MATRICES -- CONVERT TO SPARSE
+    this%h0 = 0._dp
     call packHS(this%h0, HSqrReal, this%neighbourList%iNeighbour, this%nNeighbourSK,&
         & this%orb%mOrb, this%denseDesc%iAtomStart, this%iSparseStart, this%img2CentCell)
+    this%over = 0._dp
     call packHS(this%over, SSqrReal, this%neighbourList%iNeighbour, this%nNeighbourSK,&
         & this%orb%mOrb, this%denseDesc%iAtomStart, this%iSparseStart, this%img2CentCell)
+
+  ! write (*,*) "SPARSE HAMILTONIAN POINT 1"
+  ! write (*,'(14F8.4)') this%H0(1:14)
+  ! write (*,*) "SPARSE OVERLAP POINT 1"
+  ! write (*,'(14F8.4)') this%over(1:14)
 
     ! EXTERNAL POTENTIALS -- UNIFORM ELECTRIC FIELD
     call resetExternalPotentials(this%refExtPot, this%potential)
@@ -243,6 +269,11 @@ contains
     call unpackHS(HSqrReal, this%ham(:,1), this%neighbourList%iNeighbour, this%nNeighbourSK,&
         & this%denseDesc%iAtomStart, this%iSparseStart, this%img2CentCell)
 
+  ! write (*,*) "SPARSE HAMILTONIAN POINT 2"
+  ! write (*,'(14F8.4)') this%H0(1:14)
+  ! write (*,*) "SPARSE HAMILTONIAN POINT 3"
+  ! write (*,'(14F8.4)') this%ham(1:14,1)
+
 !   end do lpSCC
 
     call env%globalTimer%stopTimer(globalTimers%scc)
@@ -301,12 +332,26 @@ contains
       end do
     end do
 
-  ! ! debug
+    ! debug
   ! write (*,*) "HAMILTONIAN"
-  ! write (*,'(198F8.4)') HSqrReal
+  ! write (*,'(36F8.4)') HSqrReal
   ! write (*,*) "OVERLAP"
-  ! write (*,'(198F8.4)') SSqrReal
+  ! write (*,'(36F8.4)') SSqrReal
+  ! do iSite = 1, nSite
+  !   write(*,*) "ORBITALS SITE ", iSite
+  !   write (*,'(12F8.4)') ptrsPhase1(iSite)%eigVec
+  ! end do
   ! write (*,*) "END MATRICES"
+
+  ! write (*,*) "FRAGMENT MOLECULAR ORBITALS CONSIDERED"
+  ! do iSite = 1, nSite
+  !   do iOrb = 1, ptrsPhase1(iSite)%nFO
+  !     iFO = indFO(iSite) + iOrb - 1
+  !     write (*,*) "FRAGMENT ", iSite, " ORBITAL ", iOrb
+  !     write (*,'(12F8.4)') ptrsPhase1(iSite)%eigVec(:,ptrsPhase1(iSite)%iHOMO+1-iOrb)
+  !   end do ! iOrb
+  ! end do ! iSite
+  ! write (*,*) "END ORBITALS"
 
     ! CALCULATE THE FMO HAMILTONIAN AND OVERLAP
     allocate(Tij(nFO,nFO))
@@ -354,10 +399,10 @@ contains
     end do
 
     ! debug
-    write (*,*) 'EIGENVALUES'
+    write (*,*) 'EIGENVALUES -- eV'
     do iSite = 1, nSite
       write (*,*) 'SITE ', iSite
-      write (*,'(6F8.4)') (ptrsPhase1(iSite)%eigVal(ptrsPhase1(iSite)%iHOMO + iFO), iFO = -2, 3)
+      write (*,'(6F8.4)') (ptrsPhase1(iSite)%eigVal(ptrsPhase1(iSite)%iHOMO + iFO) * Hartree__eV, iFO = -2, 3)
     end do
         
     write (*, *) 'Hamiltonian before putting eigenvalues from phase1'
@@ -375,8 +420,10 @@ contains
       end do
     end do
 
-    write (*, *) 'Hamiltonian before orthogonalization'
-    write (*,'(3F9.5)') Tij
+  ! write (*, *) 'Hamiltonian before orthogonalization'
+  ! write (*,'(3F9.5)') Tij
+    write (*, *) 'Hamiltonian before orthogonalization -- in eV'
+    write (*,'(3F9.5)') Tij * Hartree__eV
     write (*, *) 'corresponding overlap'
     write (*,'(3F9.5)') Sij
 
@@ -386,8 +433,8 @@ contains
     deallocate(Tij)
     deallocate(Sij)
 
-    write (*, *) 'Hamiltonian after orthogonalization'
-    write (*,'(3F9.5)') TijOrtho
+  ! write (*, *) 'Hamiltonian after orthogonalization'
+  ! write (*,'(3F9.5)') TijOrtho
     write (*, *) 'Hamiltonian after orthogonalization -- in eV'
     write (*,'(3F9.5)') TijOrtho * Hartree__eV
 

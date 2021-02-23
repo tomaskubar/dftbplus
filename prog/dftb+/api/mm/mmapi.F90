@@ -351,7 +351,7 @@ contains
     !> List of atoms and species
     type(TDftbPlusAtomList), intent(inout), optional :: atomList
 
-    !> List of atoms and species
+    !> Output file name stub
     character(len=*), intent(in), optional :: outFileNameStub
 
     type(TParserFlags) :: parserFlags
@@ -779,7 +779,11 @@ contains
 
     ! sparse matrix, overlap
   ! ptrsPhase1%denseOver = this%main%SSqrReal
-    ptrsPhase1%denseOver => this%main%SSqrReal
+  ! ptrsPhase1%denseOver => this%main%SSqrReal
+    allocate(ptrsPhase1%denseOver(this%main%nOrb,this%main%nOrb))
+    call unpackHS(ptrsPhase1%denseOver, this%main%over, this%main%neighbourList%iNeighbour,&
+        & this%main%nNeighbourSK, this%main%denseDesc%iAtomStart, this%main%iSparseStart,&
+        & this%main%img2CentCell)
 
     ! sparse matrix, charge-independent Hamiltonian
     allocate(ptrsPhase1%denseH0(this%main%nOrb,this%main%nOrb))

@@ -578,6 +578,8 @@ contains
 
     real(dp), allocatable :: dipoleTmp(:)
 
+    real(dp), allocatable :: HSqrReal(:,:), SSqrReal(:,:)
+
     if (this%tDipole) then
       allocate(dipoleTmp(3))
     end if
@@ -639,6 +641,18 @@ contains
           & this%neighbourList%iNeighbour, this%species, this%iSparseStart, this%orb)
       call buildS(env, this%over, this%skOverCont, this%coord, this%nNeighbourSk,&
           & this%neighbourList%iNeighbour, this%species, this%iSparseStart, this%orb)
+      allocate(HSqrReal(this%nOrb,this%nOrb))
+      allocate(SSqrReal(this%nOrb,this%nOrb))
+      call unpackHS(HSqrReal, this%H0, this%neighbourList%iNeighbour, this%nNeighbourSK,&
+          & this%denseDesc%iAtomStart, this%iSparseStart, this%img2CentCell)
+      call unpackHS(SSqrReal, this%over, this%neighbourList%iNeighbour, this%nNeighbourSK,&
+          & this%denseDesc%iAtomStart, this%iSparseStart, this%img2CentCell)
+      write (*,*) "HAMILTONIAN FRAGMENT"
+      write (*,'(12F8.4)') HSqrReal
+      write (*,*) "OVERLAP FRAGMENT"
+      write (*,'(12F8.4)') SSqrReal
+      deallocate(HSqrReal)
+      deallocate(SSqrReal)
     case(hamiltonianTypes%xtb)
       ! TODO
       call error("xTB calculation currently not supported")
