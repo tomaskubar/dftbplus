@@ -26,7 +26,8 @@ module dftbp_parser
   use dftbp_oldcompat
   use dftbp_inputconversion
   use dftbp_lapackroutines, only : matinv
-  use dftbp_periodic
+  use dftbp_periodic, only : TNeighbourList, TNeighbourlist_init, getSuperSampling
+  use dftbp_periodic, only : getCellTranslations, updateNeighbourList
   use dftbp_coordnumber
   use dftbp_dispersions
   use dftbp_dftd4param, only : getEeqChi, getEeqGam, getEeqKcn, getEeqRad
@@ -78,7 +79,7 @@ module dftbp_parser
   character(len=*), parameter :: rootTag = "dftbplusinput"
 
   !> Version of the current parser
-  integer, parameter :: parserVersion = 8
+  integer, parameter :: parserVersion = 9
 
 
   !> Version of the oldest parser for which compatibility is still maintained
@@ -97,6 +98,18 @@ module dftbp_parser
     !> HSD output?
     logical :: tWriteHSD
   end type TParserFlags
+
+
+  !> Mapping between input version and parser version
+  type :: TVersionMap
+    character(10) :: inputVersion
+    integer :: parserVersion
+  end type TVersionMap
+
+  !> Actual input version - parser version maps (must be updated at every public release)
+  type(TVersionMap), parameter :: versionMaps(*) = [&
+      & TVersionMap("20.2", 9), TVersionMap("20.1", 8), TVersionMap("19.1", 7),&
+      & TVersionMap("18.2", 6), TVersionMap("18.1", 5), TVersionMap("17.1", 5)]
 
 
 contains
@@ -128,39 +141,28 @@ contains
     type(TParserFlags), intent(out) :: parserFlags
 
     type(fnode), pointer :: root, tmp, driverNode, hamNode, analysisNode, child, dummy
-    logical :: hasInputVersion
-    integer :: inputVersion
-    type(string) :: versionString
+    logical :: tReadAnalysis
+    integer, allocatable :: implicitParserVersion
 
     write(stdout, '(A,1X,I0,/)') 'Parser version:', parserVersion
     write(stdout, "(A)") repeat("-", 80)
 
     call getChild(hsdTree, rootTag, root)
 
-    call getChild(root, "InputVersion", child, requested=.false.)
-    hasInputVersion = associated(child)
-    if (hasInputVersion) then
-      call getChildValue(child, "", versionString)
-      call getParserVersion(child, unquote(char(versionString)), inputVersion)
-      if (inputVersion /= parserVersion) then
-        call removeChildNodes(child)
-        call destroyNode(child)
-      end if
-    end if
-    ! Handle parser options
+    call handleInputVersion(root, implicitParserVersion)
     call getChildValue(root, "ParserOptions", dummy, "", child=child, list=.true.,&
         & allowEmptyValue=.true., dummyValue=.true.)
-    if (hasInputVersion) then
-      call readParserOptions(child, root, parserFlags, inputVersion)
-    else
-      call readParserOptions(child, root, parserFlags)
-    end if
+    call readParserOptions(child, root, parserFlags, implicitParserVersion)
 
     ! Read the geometry unless the list of atoms has been provided through the API
     if (.not. allocated(input%geom%coords)) then
       call getChild(root, "Geometry", tmp)
       call readGeometry(tmp, input)
     end if
+
+    ! Hamiltonian settings that need to know settings from the REKS block
+    call getChildValue(root, "Reks", dummy, "None", child=child)
+    call readReks(child, dummy, input%ctrl, input%geom)
 
     call getChild(root, "Transport", child, requested=.false.)
 
@@ -177,22 +179,21 @@ contains
       input%transpar%idxdevice(2) = input%geom%nAtom
     end if
 
-    ! electronic Hamiltonian
-    call getChildValue(root, "Hamiltonian", hamNode)
-
-    call readHamiltonian(hamNode, input%ctrl, input%geom, input%slako, input%transpar,&
-        & input%ginfo%greendens, input%poisson)
-
     call getChild(root, "Dephasing", child, requested=.false.)
     if (associated(child)) then
       call detailedError(child, "Be patient... Dephasing feature will be available soon!")
       !call readDephasing(child, input%slako%orb, input%geom, input%transpar, input%ginfo%tundos)
     end if
 
+    ! electronic Hamiltonian
+    call getChildValue(root, "Hamiltonian", hamNode)
+    call readHamiltonian(hamNode, input%ctrl, input%geom, input%slako, input%transpar,&
+        & input%ginfo%greendens, input%poisson)
+
   #:else
 
     if (associated(child)) then
-      call detailedError(child, "Program had been compiled without transport enabled")
+      call detailedError(child, "Program has been compiled without transport enabled")
     end if
 
     ! electronic Hamiltonian
@@ -208,33 +209,38 @@ contains
     call readDriver(driverNode, child, input%geom, input%ctrl)
   #:endif
 
-    ! Analysis of properties
-    call getChildValue(root, "Analysis", dummy, "", child=analysisNode, list=.true., &
-        & allowEmptyValue=.true., dummyValue=.true.)
-
-  #:if WITH_TRANSPORT
-    call readAnalysis(analysisNode, input%ctrl, input%geom, input%slako%orb, input%transpar, &
-        & input%ginfo%tundos)
-
-    call finalizeNegf(input)
-  #:else
-    call readAnalysis(analysisNode, input%ctrl, input%geom, input%slako%orb)
-  #:endif
-
+    tReadAnalysis = .true.
     call getChild(root, "ElectronDynamics", child=child, requested=.false.)
     if (associated(child)) then
-       allocate(input%ctrl%elecDynInp)
-       call readElecDynamics(child, input%ctrl%elecDynInp, input%geom, input%ctrl%masses)
+      allocate(input%ctrl%elecDynInp)
+      call readElecDynamics(child, input%ctrl%elecDynInp, input%geom, input%ctrl%masses)
+      if (input%ctrl%elecDynInp%tReadRestart .and. .not.input%ctrl%elecDynInp%tPopulations) then
+        tReadAnalysis = .false.
+      end if
+
+    end if
+
+    if (tReadAnalysis) then
+      ! Analysis of properties
+      call getChildValue(root, "Analysis", dummy, "", child=analysisNode, list=.true., &
+          & allowEmptyValue=.true., dummyValue=.true.)
+
+    #:if WITH_TRANSPORT
+      call readAnalysis(analysisNode, input%ctrl, input%geom, input%slako%orb, input%transpar, &
+          & input%ginfo%tundos)
+
+      call finalizeNegf(input)
+    #:else
+      call readAnalysis(analysisNode, input%ctrl, input%geom, input%slako%orb)
+    #:endif
+
     end if
 
     call getChildValue(root, "ExcitedState", dummy, "", child=child, list=.true., &
         & allowEmptyValue=.true., dummyValue=.true.)
     call readExcited(child, input%geom, input%ctrl)
 
-    call getChildValue(root, "Reks", dummy, "None", child=child)
-    call readReks(child, dummy, input%ctrl, input%geom)
-
-    ! Hamiltonian settings that need to know settings from the REKS block
+    ! Hamiltonian settings that need to know settings from the blocks above
     call readLaterHamiltonian(hamNode, input%ctrl, driverNode, input%geom)
 
     call getChildValue(root, "Options", dummy, "", child=child, list=.true., &
@@ -245,7 +251,9 @@ contains
     call readSpinConstants(hamNode, input%geom, input%slako, input%ctrl)
 
     ! analysis settings that need to know settings from the options block
-    call readLaterAnalysis(analysisNode, input%ctrl)
+    if (tReadAnalysis) then
+      call readLaterAnalysis(analysisNode, input%ctrl)
+    end if
 
     ! read parallel calculation settings
     call readParallel(root, input)
@@ -254,6 +262,29 @@ contains
     input%tInitialized = .true.
 
   end subroutine parseHsdTree
+
+
+  !> Converts input version to parser version and removes InputVersion node if present.
+  subroutine handleInputVersion(root, implicitParserVersion)
+
+    !> Root eventually containing InputVersion
+    type(fnode), pointer, intent(in) :: root
+
+    !> Parser version corresponding to input version, or unallocated if none has been found
+    integer, allocatable, intent(out) :: implicitParserVersion
+
+    type(fnode), pointer :: child, dummy
+    type(string) :: versionString
+
+    call getChild(root, "InputVersion", child, requested=.false.)
+    if (associated(child)) then
+      call getChildValue(child, "", versionString)
+      implicitParserVersion = parserVersionFromInputVersion(unquote(char(versionString)), child)
+      dummy => removeChild(root, child)
+      call destroyNode(dummy)
+    end if
+
+  end subroutine handleInputVersion
 
 
   !> Read in parser options (options not passed to the main code)
@@ -294,8 +325,8 @@ contains
           &"Sorry, no compatibility mode for parser version " &
           &// i2c(inputVersion) // " (too old)")
     elseif (inputVersion /= parserVersion) then
-      write(stdout, "(A,I2,A,I2,A)") "***  Converting input from version ", &
-          &inputVersion, " to version ", parserVersion, " ..."
+      write(stdout, "(A,I2,A,I2,A)") "***  Converting input from parser version ", &
+          &inputVersion, " to parser version ", parserVersion, " ..."
       call convertOldHSD(root, inputVersion, parserVersion)
       write(stdout, "(A,/)") "***  Done."
     end if
@@ -379,6 +410,8 @@ contains
     ! range of default atoms to move
     character(mc) :: atomsRange
 
+    logical :: isMaxStepNeeded
+
     atomsRange = "1:-1"
   #:if WITH_TRANSPORT
     if (transpar%defined) then
@@ -404,218 +437,70 @@ contains
     case ("none")
       continue
     case ("steepestdescent")
+
       ! Steepest downhill optimisation
-
       ctrl%iGeoOpt = geoOptTypes%steepestDesc
-      ctrl%tForces = .true.
-      ctrl%restartFreq = 1
-
-      call getChildValue(node, "LatticeOpt", ctrl%tLatOpt, .false.)
-      if (ctrl%tLatOpt) then
-        call getChildValue(node, "Pressure", ctrl%pressure, 0.0_dp, &
-            & modifier=modifier, child=child)
-        call convertByMul(char(modifier), pressureUnits, child, &
-            & ctrl%pressure)
-        call getChildValue(node, "FixAngles", ctrl%tLatOptFixAng, .false.)
-        if (ctrl%tLatOptFixAng) then
-          call getChildValue(node, "FixLengths", ctrl%tLatOptFixLen, &
-              & (/.false.,.false.,.false./))
-        else
-          call getChildValue(node, "Isotropic", ctrl%tLatOptIsotropic, .false.)
-        end if
-        call getChildValue(node, "MaxLatticeStep", ctrl%maxLatDisp, 0.2_dp)
-      end if
-      call getChildValue(node, "MovedAtoms", buffer2, trim(atomsRange), child=child, &
-          &multiple=.true.)
-      call convAtomRangeToInt(char(buffer2), geom%speciesNames, geom%species, child,&
-          & ctrl%indMovedAtom)
-
-      ctrl%nrMoved = size(ctrl%indMovedAtom)
-      ctrl%tCoordOpt = (ctrl%nrMoved /= 0)
-      if (ctrl%tCoordOpt) then
-        call getChildValue(node, "MaxAtomStep", ctrl%maxAtomDisp, 0.2_dp)
-      end if
-      call getChildValue(node, "MaxForceComponent", ctrl%maxForce, 1e-4_dp, &
-          &modifier=modifier, child=field)
-      call convertByMul(char(modifier), forceUnits, field, ctrl%maxForce)
-      call getChildValue(node, "MaxSteps", ctrl%maxRun, 200)
-      call getChildValue(node, "StepSize", ctrl%deltaT, 100.0_dp, &
-          &modifier=modifier, child=field)
-      call convertByMul(char(modifier), timeUnits, field, ctrl%deltaT)
-      call getChildValue(node, "OutputPrefix", buffer2, "geo_end")
-      ctrl%outFile = unquote(char(buffer2))
-      call getChildValue(node, "AppendGeometries", ctrl%tAppendGeo, .false.)
-      call getChildValue(node, "ConvergentForcesOnly", ctrl%isSccConvRequired, .true.)
-      call readGeoConstraints(node, ctrl, geom%nAtom)
-      if (ctrl%tLatOpt) then
-        if (ctrl%nrConstr/=0) then
-          call error("Lattice optimisation and constraints currently&
-              & incompatible.")
-        end if
-        if (ctrl%nrMoved/=0.and.ctrl%nrMoved<geom%nAtom) then
-          call error("Subset of optimising atoms not currently possible with&
-              & lattice optimisation.")
-        end if
-      end if
-      ctrl%isGeoOpt = ctrl%tLatOpt .or. ctrl%tCoordOpt
+      #:if WITH_TRANSPORT
+      call commonGeoOptions(node, ctrl, geom, transpar)
+      #:else
+      call commonGeoOptions(node, ctrl, geom)
+      #:endif
 
     case ("conjugategradient")
+
       ! Conjugate gradient location optimisation
-
       ctrl%iGeoOpt = geoOptTypes%conjugateGrad
-      ctrl%tForces = .true.
-      ctrl%restartFreq = 1
-      call getChildValue(node, "LatticeOpt", ctrl%tLatOpt, .false.)
-      if (ctrl%tLatOpt) then
-        call getChildValue(node, "Pressure", ctrl%pressure, 0.0_dp, &
-            & modifier=modifier, child=child)
-        call convertByMul(char(modifier), pressureUnits, child, &
-            & ctrl%pressure)
-        call getChildValue(node, "FixAngles", ctrl%tLatOptFixAng, .false.)
-        if (ctrl%tLatOptFixAng) then
-          call getChildValue(node, "FixLengths", ctrl%tLatOptFixLen, &
-              & (/.false.,.false.,.false./))
-        else
-          call getChildValue(node, "Isotropic", ctrl%tLatOptIsotropic, .false.)
-        end if
-        call getChildValue(node, "MaxLatticeStep", ctrl%maxLatDisp, 0.2_dp)
-      end if
-      call getChildValue(node, "MovedAtoms", buffer2, trim(atomsRange), child=child, &
-          &multiple=.true.)
-      call convAtomRangeToInt(char(buffer2), geom%speciesNames, geom%species, child,&
-          & ctrl%indMovedAtom)
-
-      ctrl%nrMoved = size(ctrl%indMovedAtom)
-      ctrl%tCoordOpt = (ctrl%nrMoved /= 0)
-      if (ctrl%tCoordOpt) then
-        call getChildValue(node, "MaxAtomStep", ctrl%maxAtomDisp, 0.2_dp)
-      end if
-      call getChildValue(node, "MaxForceComponent", ctrl%maxForce, 1e-4_dp, &
-          &modifier=modifier, child=field)
-      call convertByMul(char(modifier), forceUnits, field, ctrl%maxForce)
-      call getChildValue(node, "MaxSteps", ctrl%maxRun, 200)
-      call getChildValue(node, "OutputPrefix", buffer2, "geo_end")
-      ctrl%outFile = unquote(char(buffer2))
-      call getChildValue(node, "AppendGeometries", ctrl%tAppendGeo, .false.)
-      call getChildValue(node, "ConvergentForcesOnly", ctrl%isSccConvRequired, .true.)
-      call readGeoConstraints(node, ctrl, geom%nAtom)
-      if (ctrl%tLatOpt) then
-        if (ctrl%nrConstr/=0) then
-          call error("Lattice optimisation and constraints currently&
-              & incompatible.")
-        end if
-        if (ctrl%nrMoved/=0.and.ctrl%nrMoved<geom%nAtom) then
-          call error("Subset of optimising atoms not currently possible with&
-              & lattice optimisation.")
-        end if
-      end if
-      ctrl%isGeoOpt = ctrl%tLatOpt .or. ctrl%tCoordOpt
+      #:if WITH_TRANSPORT
+      call commonGeoOptions(node, ctrl, geom, transpar)
+      #:else
+      call commonGeoOptions(node, ctrl, geom)
+      #:endif
 
     case("gdiis")
-      ! Gradient DIIS optimisation, only stable in the quadratic region
 
+      ! Gradient DIIS optimisation, only stable in the quadratic region
       ctrl%iGeoOpt = geoOptTypes%diis
-      ctrl%tForces = .true.
-      ctrl%restartFreq = 1
       call getChildValue(node, "alpha", ctrl%deltaGeoOpt, 1.0E-1_dp)
       call getChildValue(node, "Generations", ctrl%iGenGeoOpt, 8)
-      call getChildValue(node, "LatticeOpt", ctrl%tLatOpt, .false.)
-      if (ctrl%tLatOpt) then
-        call getChildValue(node, "Pressure", ctrl%pressure, 0.0_dp, &
-            & modifier=modifier, child=child)
-        call convertByMul(char(modifier), pressureUnits, child, &
-            & ctrl%pressure)
-        call getChildValue(node, "FixAngles", ctrl%tLatOptFixAng, .false.)
-        if (ctrl%tLatOptFixAng) then
-          call getChildValue(node, "FixLengths", ctrl%tLatOptFixLen, &
-              & (/.false.,.false.,.false./))
-        else
-          call getChildValue(node, "Isotropic", ctrl%tLatOptIsotropic, .false.)
-        end if
-        call getChildValue(node, "MaxLatticeStep", ctrl%maxLatDisp, 0.2_dp)
-      end if
-      call getChildValue(node, "MovedAtoms", buffer2, trim(atomsRange), child=child, &
-          &multiple=.true.)
-      call convAtomRangeToInt(char(buffer2), geom%speciesNames, geom%species, child,&
-          & ctrl%indMovedAtom)
-
-      ctrl%nrMoved = size(ctrl%indMovedAtom)
-      ctrl%tCoordOpt = (ctrl%nrMoved /= 0)
-      call getChildValue(node, "MaxForceComponent", ctrl%maxForce, 1e-4_dp, &
-          &modifier=modifier, child=field)
-      call convertByMul(char(modifier), forceUnits, field, ctrl%maxForce)
-      call getChildValue(node, "MaxSteps", ctrl%maxRun, 200)
-      call getChildValue(node, "OutputPrefix", buffer2, "geo_end")
-      ctrl%outFile = unquote(char(buffer2))
-      call getChildValue(node, "AppendGeometries", ctrl%tAppendGeo, .false.)
-      call getChildValue(node, "ConvergentForcesOnly", ctrl%isSccConvRequired, .true.)
-      call readGeoConstraints(node, ctrl, geom%nAtom)
-      if (ctrl%tLatOpt) then
-        if (ctrl%nrConstr/=0) then
-          call error("Lattice optimisation and constraints currently&
-              & incompatible.")
-        end if
-        if (ctrl%nrMoved/=0.and.ctrl%nrMoved<geom%nAtom) then
-          call error("Subset of optimising atoms not currently possible with&
-              & lattice optimisation.")
-        end if
-      end if
-      ctrl%isGeoOpt = ctrl%tLatOpt .or. ctrl%tCoordOpt
+      #:if WITH_TRANSPORT
+      call commonGeoOptions(node, ctrl, geom, transpar)
+      #:else
+      call commonGeoOptions(node, ctrl, geom)
+      #:endif
 
     case ("lbfgs")
 
       ctrl%iGeoOpt = geoOptTypes%lbfgs
 
-      ctrl%tForces = .true.
-      ctrl%restartFreq = 1
-      call getChildValue(node, "LatticeOpt", ctrl%tLatOpt, .false.)
-      if (ctrl%tLatOpt) then
-        call getChildValue(node, "Pressure", ctrl%pressure, 0.0_dp, &
-            & modifier=modifier, child=child)
-        call convertByMul(char(modifier), pressureUnits, child, &
-            & ctrl%pressure)
-        call getChildValue(node, "FixAngles", ctrl%tLatOptFixAng, .false.)
-        if (ctrl%tLatOptFixAng) then
-          call getChildValue(node, "FixLengths", ctrl%tLatOptFixLen, &
-              & (/.false.,.false.,.false./))
-        else
-          call getChildValue(node, "Isotropic", ctrl%tLatOptIsotropic, .false.)
-        end if
-        call getChildValue(node, "MaxLatticeStep", ctrl%maxLatDisp, 0.2_dp)
-      end if
-      call getChildValue(node, "MovedAtoms", buffer2, trim(atomsRange), child=child, &
-          &multiple=.true.)
-      call convAtomRangeToInt(char(buffer2), geom%speciesNames, geom%species, child,&
-          & ctrl%indMovedAtom)
-
-      ctrl%nrMoved = size(ctrl%indMovedAtom)
-      ctrl%tCoordOpt = (ctrl%nrMoved /= 0)
-      if (ctrl%tCoordOpt) then
-        call getChildValue(node, "MaxAtomStep", ctrl%maxAtomDisp, 0.2_dp)
-      end if
-      call getChildValue(node, "MaxForceComponent", ctrl%maxForce, 1e-4_dp, &
-          &modifier=modifier, child=field)
-      call convertByMul(char(modifier), forceUnits, field, ctrl%maxForce)
-      call getChildValue(node, "MaxSteps", ctrl%maxRun, 200)
-      call getChildValue(node, "OutputPrefix", buffer2, "geo_end")
-      ctrl%outFile = unquote(char(buffer2))
-      call getChildValue(node, "AppendGeometries", ctrl%tAppendGeo, .false.)
-      call getChildValue(node, "ConvergentForcesOnly", ctrl%isSccConvRequired, .true.)
-      call readGeoConstraints(node, ctrl, geom%nAtom)
-      if (ctrl%tLatOpt) then
-        if (ctrl%nrConstr/=0) then
-          call error("Lattice optimisation and constraints currently&
-              & incompatible.")
-        end if
-        if (ctrl%nrMoved/=0.and.ctrl%nrMoved<geom%nAtom) then
-          call error("Subset of optimising atoms not currently possible with&
-              & lattice optimisation.")
-        end if
-      end if
-      ctrl%isGeoOpt = ctrl%tLatOpt .or. ctrl%tCoordOpt
-
       allocate(ctrl%lbfgsInp)
       call getChildValue(node, "Memory", ctrl%lbfgsInp%memory, 20)
+
+      call getChildValue(node, "LineSearch", ctrl%lbfgsInp%isLineSearch, .false.)
+
+      isMaxStepNeeded = .not. ctrl%lbfgsInp%isLineSearch
+      if (isMaxStepNeeded) then
+        call getChildValue(node, "setMaxStep", ctrl%lbfgsInp%isLineSearch, isMaxStepNeeded)
+        ctrl%lbfgsInp%MaxQNStep = isMaxStepNeeded
+      else
+        call getChildValue(node, "oldLineSearch", ctrl%lbfgsInp%isOldLS, .false.)
+      end if
+
+      #:if WITH_TRANSPORT
+      call commonGeoOptions(node, ctrl, geom, transpar, ctrl%lbfgsInp%isLineSearch)
+      #:else
+      call commonGeoOptions(node, ctrl, geom, ctrl%lbfgsInp%isLineSearch)
+      #:endif
+
+    case ("fire")
+
+      ctrl%iGeoOpt = geoOptTypes%fire
+      #:if WITH_TRANSPORT
+      call commonGeoOptions(node, ctrl, geom, transpar, .false.)
+      #:else
+      call commonGeoOptions(node, ctrl, geom, .false.)
+      #:endif
+      call getChildValue(node, "TimeStep", ctrl%deltaT, 1.0_dp, modifier=modifier, child=field)
+      call convertByMul(char(modifier), timeUnits, field, ctrl%deltaT)
 
     case("secondderivatives")
       ! currently only numerical derivatives of forces is implemented
@@ -893,12 +778,116 @@ contains
     #:endif
 
     case default
+
       call getNodeHSDName(node, buffer)
       call detailedError(parent, "Invalid driver '" // char(buffer) // "'")
 
     end select driver
 
   end subroutine readDriver
+
+
+  !> Common geometry optimisation settings for various drivers
+#:if WITH_TRANSPORT
+  subroutine commonGeoOptions(node, ctrl, geom, transpar, isMaxStepNeeded)
+#:else
+  subroutine commonGeoOptions(node, ctrl, geom, isMaxStepNeeded)
+#:endif
+
+    !> Node to get the information from
+    type(fnode), pointer :: node
+
+    !> Control structure to be filled
+    type(TControl), intent(inout) :: ctrl
+
+    !> geometry of the system
+    type(TGeometry), intent(in) :: geom
+
+  #:if WITH_TRANSPORT
+    !> Transport parameters
+    type(TTransPar), intent(in) :: transpar
+  #:endif
+
+    !> Is the maximum step size relevant for this driver
+    logical, intent(in), optional :: isMaxStepNeeded
+
+    type(fnode), pointer :: child, child2, child3, value1, value2, field
+    type(string) :: buffer, buffer2, modifier
+    ! range of default atoms to move
+    character(mc) :: atomsRange
+    logical :: isMaxStep
+
+    if (present(isMaxStepNeeded)) then
+      isMaxStep = isMaxStepNeeded
+    else
+      isMaxStep = .true.
+    end if
+
+    atomsRange = "1:-1"
+  #:if WITH_TRANSPORT
+    if (transpar%defined) then
+      ! only those atoms in the device region
+      write(atomsRange,"(I0,':',I0)")transpar%idxdevice
+    end if
+  #:endif
+
+    ctrl%tForces = .true.
+    ctrl%restartFreq = 1
+
+    call getChildValue(node, "LatticeOpt", ctrl%tLatOpt, .false.)
+    if (ctrl%tLatOpt) then
+      call getChildValue(node, "Pressure", ctrl%pressure, 0.0_dp, &
+          & modifier=modifier, child=child)
+      call convertByMul(char(modifier), pressureUnits, child, &
+          & ctrl%pressure)
+      call getChildValue(node, "FixAngles", ctrl%tLatOptFixAng, .false.)
+      if (ctrl%tLatOptFixAng) then
+        call getChildValue(node, "FixLengths", ctrl%tLatOptFixLen, &
+            & (/.false.,.false.,.false./))
+      else
+        call getChildValue(node, "Isotropic", ctrl%tLatOptIsotropic, .false.)
+      end if
+      if (isMaxStep) then
+        call getChildValue(node, "MaxLatticeStep", ctrl%maxLatDisp, 0.2_dp)
+      end if
+    end if
+    call getChildValue(node, "MovedAtoms", buffer2, trim(atomsRange), child=child, &
+        &multiple=.true.)
+    call convAtomRangeToInt(char(buffer2), geom%speciesNames, geom%species, child,&
+        & ctrl%indMovedAtom)
+
+    ctrl%nrMoved = size(ctrl%indMovedAtom)
+    ctrl%tCoordOpt = (ctrl%nrMoved /= 0)
+    if (ctrl%tCoordOpt) then
+      if (isMaxStep) then
+        call getChildValue(node, "MaxAtomStep", ctrl%maxAtomDisp, 0.2_dp)
+      end if
+    end if
+    call getChildValue(node, "MaxForceComponent", ctrl%maxForce, 1e-4_dp, &
+        &modifier=modifier, child=field)
+    call convertByMul(char(modifier), forceUnits, field, ctrl%maxForce)
+    call getChildValue(node, "MaxSteps", ctrl%maxRun, 200)
+    call getChildValue(node, "StepSize", ctrl%deltaT, 100.0_dp, &
+        &modifier=modifier, child=field)
+    call convertByMul(char(modifier), timeUnits, field, ctrl%deltaT)
+    call getChildValue(node, "OutputPrefix", buffer2, "geo_end")
+    ctrl%outFile = unquote(char(buffer2))
+    call getChildValue(node, "AppendGeometries", ctrl%tAppendGeo, .false.)
+    call getChildValue(node, "ConvergentForcesOnly", ctrl%isSccConvRequired, .true.)
+    call readGeoConstraints(node, ctrl, geom%nAtom)
+    if (ctrl%tLatOpt) then
+      if (ctrl%nrConstr/=0) then
+        call error("Lattice optimisation and constraints currently&
+            & incompatible.")
+      end if
+      if (ctrl%nrMoved/=0.and.ctrl%nrMoved<geom%nAtom) then
+        call error("Subset of optimising atoms not currently possible with&
+            & lattice optimisation.")
+      end if
+    end if
+    ctrl%isGeoOpt = ctrl%tLatOpt .or. ctrl%tCoordOpt
+
+  end subroutine commonGeoOptions
 
 
   !> Extended lagrangian options for XLBOMD
@@ -1387,6 +1376,21 @@ contains
       ! DFTB hydrogen bond corrections
       call readHCorrection(node, geo, ctrl)
 
+      !> TI-DFTB varibles for Delta DFTB
+      call getChild(node, "NonAufbau", child, requested=.false.)
+      if (associated(child)) then
+        ctrl%isNonAufbau = .true.
+        call getChildValue(child, "SpinPurify", ctrl%isSpinPurify, .true.)
+        call getChildValue(child, "GroundGuess", ctrl%isGroundGuess, .false.)
+        ctrl%nrChrg = 0.0_dp
+        ctrl%tSpin = .true.
+        ctrl%t2Component = .false.
+        ctrl%nrSpinPol = 0.0_dp
+        ctrl%tSpinSharedEf = .false.
+      else
+        ctrl%isNonAufbau = .false.
+      end if
+
     end if ifSCC
 
     ! Customize the reference atomic charges for virtual doping
@@ -1394,11 +1398,13 @@ contains
         & ctrl%customOccAtoms, ctrl%customOccFillings)
 
     ! Spin calculation
-  #:if WITH_TRANSPORT
-    call readSpinPolarisation(node, ctrl, geo, tp)
-  #:else
-    call readSpinPolarisation(node, ctrl, geo)
-  #:endif
+    if (ctrl%reksInp%reksAlg == reksTypes%noReks  .and. .not.ctrl%isNonAufbau) then
+    #:if WITH_TRANSPORT
+      call readSpinPolarisation(node, ctrl, geo, tp)
+    #:else
+      call readSpinPolarisation(node, ctrl, geo)
+    #:endif
+    end if
 
     ! temporararily removed until debugged
     !if (.not. ctrl%tscc) then
@@ -1443,6 +1449,7 @@ contains
     call readSolver(node, ctrl, geo, poisson)
   #:endif
 
+
     ! Charge
     call getChildValue(node, "Charge", ctrl%nrChrg, 0.0_dp)
 
@@ -1450,22 +1457,20 @@ contains
     call readKPoints(node, ctrl, geo, tBadIntegratingKPoints)
 
     call getChild(node, "OrbitalPotential", child, requested=.false.)
-    if (.not. associated(child)) then
-      ctrl%tDFTBU = .false.
-      ctrl%DFTBUfunc = 0
-    else
+    if (associated(child)) then
+      allocate(ctrl%dftbUInp)
       call getChildValue(child, "Functional", buffer, "fll")
       select case(tolower(char(buffer)))
       case ("fll")
-        ctrl%DFTBUfunc = plusUFunctionals%fll
+        ctrl%dftbUInp%iFunctional = plusUFunctionals%fll
       case ("psic")
-        ctrl%DFTBUfunc = plusUFunctionals%pSic
+        ctrl%dftbUInp%iFunctional = plusUFunctionals%pSic
       case default
         call detailedError(child,"Unknown orbital functional :"// char(buffer))
       end select
 
-      allocate(ctrl%nUJ(geo%nSpecies))
-      ctrl%nUJ = 0
+      allocate(ctrl%dftbUInp%nUJ(geo%nSpecies))
+      ctrl%dftbUInp%nUJ(:) = 0
 
       ! to hold list of U-J values for each atom
       allocate(lrN(geo%nSpecies))
@@ -1479,8 +1484,8 @@ contains
         call init(liN(iSp1))
         call init(li1N(iSp1))
         call getChildren(child, trim(geo%speciesNames(iSp1)), children)
-        ctrl%nUJ(iSp1) = getLength(children)
-        do ii = 1, ctrl%nUJ(iSp1)
+        ctrl%dftbUInp%nUJ(iSp1) = getLength(children)
+        do ii = 1, ctrl%dftbUInp%nUJ(iSp1)
           call getItem1(children, ii, child2)
 
           call init(li)
@@ -1509,28 +1514,29 @@ contains
       end do
 
       do iSp1 = 1, geo%nSpecies
-        ctrl%nUJ(iSp1) = len(lrN(iSp1))
+        ctrl%dftbUInp%nUJ(iSp1) = len(lrN(iSp1))
       end do
-      allocate(ctrl%UJ(maxval(ctrl%nUJ),geo%nSpecies))
-      ctrl%UJ = 0.0_dp
-      allocate(ctrl%niUJ(maxval(ctrl%nUJ),geo%nSpecies))
-      ctrl%niUJ = 0
+      allocate(ctrl%dftbUInp%UJ(maxval(ctrl%dftbUInp%nUJ),geo%nSpecies))
+      ctrl%dftbUInp%UJ(:,:) = 0.0_dp
+      allocate(ctrl%dftbUInp%niUJ(maxval(ctrl%dftbUInp%nUJ),geo%nSpecies))
+      ctrl%dftbUInp%niUJ(:,:) = 0
       do iSp1 = 1, geo%nSpecies
-        call asArray(lrN(iSp1),ctrl%UJ(1:len(lrN(iSp1)),iSp1))
+        call asArray(lrN(iSp1),ctrl%dftbUInp%UJ(1:len(lrN(iSp1)),iSp1))
         allocate(iTmpN(len(liN(iSp1))))
         call asArray(liN(iSp1),iTmpN)
-        ctrl%niUJ(1:len(liN(iSp1)),iSp1) = iTmpN(:)
+        ctrl%dftbUInp%niUJ(1:len(liN(iSp1)),iSp1) = iTmpN(:)
         deallocate(iTmpN)
         call destruct(lrN(iSp1))
         call destruct(liN(iSp1))
       end do
-      allocate(ctrl%iUJ(maxval(ctrl%niUJ),maxval(ctrl%nUJ),geo%nSpecies))
-      ctrl%iUJ = 0
+      allocate(ctrl%dftbUInp%iUJ(maxval(ctrl%dftbUInp%niUJ),&
+          & maxval(ctrl%dftbUInp%nUJ),geo%nSpecies))
+      ctrl%dftbUInp%iUJ(:,:,:) = 0
       do iSp1 = 1, geo%nSpecies
-        do ii = 1, ctrl%nUJ(iSp1)
-          allocate(iTmpN(ctrl%niUJ(ii,iSp1)))
+        do ii = 1, ctrl%dftbUInp%nUJ(iSp1)
+          allocate(iTmpN(ctrl%dftbUInp%niUJ(ii,iSp1)))
           call get(li1N(iSp1),iTmpN,ii)
-          ctrl%iUJ(1:ctrl%niUJ(ii,iSp1),ii,iSp1) = iTmpN(:)
+          ctrl%dftbUInp%iUJ(1:ctrl%dftbUInp%niUJ(ii,iSp1),ii,iSp1) = iTmpN(:)
           deallocate(iTmpN)
         end do
         call destruct(li1N(iSp1))
@@ -1540,14 +1546,14 @@ contains
       deallocate(lrN)
       deallocate(liN)
 
-      ! sanity check time
+      ! check input values
       allocate(iTmpN(slako%orb%mShell))
       do iSp1 = 1, geo%nSpecies
         iTmpN = 0
         ! loop over number of blocks for that species
-        do ii = 1, ctrl%nUJ(iSp1)
-          iTmpN(ctrl%iUJ(1:ctrl%niUJ(ii,iSp1),ii,iSp1)) = &
-              & iTmpN(ctrl%iUJ(1:ctrl%niUJ(ii,iSp1),ii,iSp1)) + 1
+        do ii = 1, ctrl%dftbUInp%nUJ(iSp1)
+          iTmpN(ctrl%dftbUInp%iUJ(1:ctrl%dftbUInp%niUJ(ii,iSp1),ii,iSp1)) = &
+              & iTmpN(ctrl%dftbUInp%iUJ(1:ctrl%dftbUInp%niUJ(ii,iSp1),ii,iSp1)) + 1
         end do
         if (any(iTmpN(:)>1)) then
           write(stdout, *)'Multiple copies of shells present in OrbitalPotential!'
@@ -1559,8 +1565,6 @@ contains
         end if
       end do
       deallocate(iTmpN)
-
-      ctrl%tDFTBU = .true.
 
     end if
 
@@ -1735,14 +1739,31 @@ contains
       ! get charge mixing options etc.
       call readSccOptions(node, ctrl, geo)
 
+      !> TI-DFTB varibles for Delta DFTB
+      call getChild(node, "NonAufbau", child, requested=.false.)
+      if (associated(child)) then
+        ctrl%isNonAufbau = .true.
+        call getChildValue(child, "SpinPurify", ctrl%isSpinPurify, .true.)
+        call getChildValue(child, "GroundGuess", ctrl%isGroundGuess, .false.)
+        ctrl%nrChrg = 0.0_dp
+        ctrl%tSpin = .true.
+        ctrl%t2Component = .false.
+        ctrl%nrSpinPol = 0.0_dp
+        ctrl%tSpinSharedEf = .false.
+      else
+        ctrl%isNonAufbau = .false.
+      end if
+
     end if ifSCC
 
     ! Spin calculation
-  #:if WITH_TRANSPORT
-    call readSpinPolarisation(node, ctrl, geo, tp)
-  #:else
-    call readSpinPolarisation(node, ctrl, geo)
-  #:endif
+    if (ctrl%reksInp%reksAlg == reksTypes%noReks .and. .not.ctrl%isNonAufbau) then
+    #:if WITH_TRANSPORT
+      call readSpinPolarisation(node, ctrl, geo, tp)
+    #:else
+      call readSpinPolarisation(node, ctrl, geo)
+    #:endif
+    end if
 
     ! temporararily removed until debugged
     !if (.not. ctrl%tscc) then
@@ -2074,13 +2095,6 @@ contains
       call detailedError(child, "Invalid spin polarisation type '" //&
           & char(buffer) // "'")
     end select
-
-  #:if WITH_TRANSPORT
-    if (ctrl%tSpin .and. tp%ncont > 0) then
-       call detailedError(child, "Spin-polarized transport is under development" //&
-             & "and not currently available")
-    end if
-  #:endif
 
   end subroutine readSpinPolarisation
 
@@ -3706,6 +3720,9 @@ contains
   #:else
       call detailedError(node, "Program had been compiled without DFTD3 support")
   #:endif
+    case ("simpledftd3")
+      allocate(input%sdftd3)
+      call readSimpleDFTD3(dispModel, geo, input%sdftd3)
     case ("dftd4")
       allocate(input%dftd4)
       call readDispDFTD4(dispModel, geo, input%dftd4, nrChrg)
@@ -3815,7 +3832,7 @@ contains
         cellVec(:, 1) = (/ 0.0_dp, 0.0_dp, 0.0_dp /)
         rCellVec(:, 1) = (/ 0.0_dp, 0.0_dp, 0.0_dp /)
       end if
-      call init(neighs, geo%nAtom, 10)
+      call TNeighbourlist_init(neighs, geo%nAtom, 10)
       if (geo%tPeriodic) then
         ! Make some guess for the nr. of all interacting atoms
         nAllAtom = int((real(geo%nAtom, dp)**(1.0_dp/3.0_dp) + 3.0_dp)**3)
@@ -4002,6 +4019,37 @@ contains
   end subroutine readDispDFTD3
 
 #:endif
+
+
+  !> Reads in initialization data for the simple D3 dispersion model.
+  subroutine readSimpleDFTD3(node, geo, input)
+
+    !> Node to process.
+    type(fnode), pointer :: node
+
+    !> Geometry of the system
+    type(TGeometry), intent(in) :: geo
+
+    !> Filled input structure on exit.
+    type(TSimpleDftD3Input), intent(out) :: input
+
+    type(fnode), pointer :: value1, child, childval
+    type(string) :: buffer
+
+    call getChildValue(node, "s6", input%s6, default=1.0_dp)
+    call getChildValue(node, "s8", input%s8)
+    call getChildValue(node, "s10", input%s10, default=0.0_dp)
+    call getChildValue(node, "a1", input%a1)
+    call getChildValue(node, "a2", input%a2)
+    call getChildValue(node, "alpha", input%alpha, default=14.0_dp)
+    call getChildValue(node, "weightingFactor", input%weightingFactor, default=4.0_dp)
+    call getChildValue(node, "cutoffInter", input%cutoffInter, default=64.0_dp, modifier=buffer,&
+        & child=child)
+    call convertByMul(char(buffer), lengthUnits, child, input%cutoffInter)
+
+    call readCoordinationNumber(node, input%cnInput, geo, "exp", 0.0_dp)
+
+  end subroutine readSimpleDFTD3
 
 
   !> Reads in initialization data for the D4 dispersion model.
@@ -4300,18 +4348,18 @@ contains
     type(fnode), pointer :: child
 
     input%method = 'ts'
-    call getChildValue(node, "EnergyAccuracy", input%ts_ene_acc, input%ts_ene_acc, modifier=buffer,&
-        & child=child)
+    call getChildValue(node, "EnergyAccuracy", input%ts_ene_acc, default=(input%ts_ene_acc),&
+        & modifier=buffer, child=child)
     call convertByMul(char(buffer), energyUnits, child, input%ts_ene_acc)
-    call getChildValue(node, "ForceAccuracy", input%ts_f_acc, input%ts_f_acc, modifier=buffer,&
-        & child=child)
+    call getChildValue(node, "ForceAccuracy", input%ts_f_acc, default=(input%ts_f_acc),&
+        & modifier=buffer, child=child)
     call convertByMul(char(buffer), forceUnits, child, input%ts_f_acc)
-    call getChildValue(node, "Damping", input%ts_d, input%ts_d)
-    call getChildValue(node, "RangeSeparation", input%ts_sr, input%ts_sr)
+    call getChildValue(node, "Damping", input%ts_d, default=(input%ts_d))
+    call getChildValue(node, "RangeSeparation", input%ts_sr, default=(input%ts_sr))
     call getChildValue(node, "ReferenceSet", buffer, 'ts', child=child)
     input%vdw_params_kind = tolower(unquote(char(buffer)))
     call checkManyBodyDispRefName(input%vdw_params_kind, child)
-    call getChildValue(node, "LogLevel", input%log_level, input%log_level)
+    call getChildValue(node, "LogLevel", input%log_level, default=(input%log_level))
   end subroutine readDispTs
 
 
@@ -4329,13 +4377,14 @@ contains
 
     input%method = 'mbd-rsscs'
     call getChildValue(node, "Beta", input%mbd_beta, input%mbd_beta)
-    call getChildValue(node, "NOmegaGrid", input%n_omega_grid, input%n_omega_grid)
+    call getChildValue(node, "NOmegaGrid", input%n_omega_grid, default=(input%n_omega_grid))
     call getChildValue(node, "KGrid", input%k_grid)
-    call getChildValue(node, "KGridShift", input%k_grid_shift, input%k_grid_shift)
+    call getChildValue(node, "KGridShift", input%k_grid_shift, default=(input%k_grid_shift))
     call getChildValue(node, "ReferenceSet", buffer, 'ts', child=child)
     input%vdw_params_kind = tolower(unquote(char(buffer)))
     call checkManyBodyDispRefName(input%vdw_params_kind, child)
-    call getChildValue(node, "LogLevel", input%log_level, input%log_level)
+    call getChildValue(node, "LogLevel", input%log_level, default=(input%log_level))
+
   end subroutine readDispMbd
 
 
@@ -4803,7 +4852,7 @@ contains
   end subroutine readLaterAnalysis
 
 
-  !> Read in hamiltonian settings that are influenced by those read from REKS{}
+  !> Read in hamiltonian settings that are influenced by those read from REKS{}, electronDynamics{}
   subroutine readLaterHamiltonian(hamNode, ctrl, driverNode, geo)
 
     !> Hamiltonian node to parse
@@ -4891,6 +4940,16 @@ contains
         end if
       end if
 
+    end if
+
+    hamNeedsT: if (ctrl%reksInp%reksAlg == reksTypes%noReks) then
+
+      if (allocated(ctrl%elecDynInp)) then
+        if (ctrl%elecDynInp%tReadRestart .and. .not.ctrl%elecDynInp%tPopulations) then
+          exit hamNeedsT
+        end if
+      end if
+
       ! Filling (temperature only read, if AdaptFillingTemp was not set for the selected MD
       ! thermostat.)
       select case(ctrl%hamiltonian)
@@ -4900,7 +4959,7 @@ contains
         call readFilling(hamNode, ctrl, geo, 0.0_dp)
       end select
 
-    end if
+    end if hamNeedsT
 
   end subroutine readLaterHamiltonian
 
@@ -6435,9 +6494,12 @@ contains
 
       call readPDOSRegions(root, geo, transpar%idxdevice, iAtInRegion, &
           & tShellResInRegion, regionLabelPrefixes)
-      call transformPdosRegionInfo(iAtInRegion, tShellResInRegion, &
-          & regionLabelPrefixes, orb, geo%species, tundos%dosOrbitals, &
-          & tundos%dosLabels)
+
+      if (allocated(iAtInRegion)) then
+        call transformPdosRegionInfo(iAtInRegion, tShellResInRegion, &
+            & regionLabelPrefixes, orb, geo%species, tundos%dosOrbitals, &
+            & tundos%dosLabels)
+      end if
 
   end subroutine readTunAndDos
 
@@ -6688,17 +6750,23 @@ contains
     type(fnode), pointer :: child, child2
     type(string) :: buffer
     character(lc) :: strTmp
+    logical :: do_ldos
 
     call getChildren(node, "Region", children)
     nReg = getLength(children)
 
     if (nReg == 0) then
-      write(strTmp,"(I0, ':', I0)") idxdevice(1), idxdevice(2)
-      call setChild(node, "Region", child)
-      call setChildValue(child, "Atoms", trim(strTmp))
-      call setChildValue(child, "Label", "localDOS")
-      call getChildren(node, "Region", children)
-      nReg = getLength(children)
+      call getChildValue(node, "ComputeLDOS", do_ldos, .true.)
+      if (do_ldos) then
+        write(strTmp,"(I0, ':', I0)") idxdevice(1), idxdevice(2)
+        call setChild(node, "Region", child)
+        call setChildValue(child, "Atoms", trim(strTmp))
+        call setChildValue(child, "Label", "localDOS")
+        call getChildren(node, "Region", children)
+        nReg = getLength(children)
+      else
+        return
+      end if
     end if
 
     allocate(tShellResInRegion(nReg))
@@ -7372,25 +7440,29 @@ contains
   end subroutine readSpinTuning
 
 
-  subroutine getParserVersion(node, versionString, parserVersion)
-    type(fnode), pointer :: node
+  !> Returns parser version for a given input version or throws an error if not possible.
+  function parserVersionFromInputVersion(versionString, node) result(parserVersion)
+
+    !> Input version string
     character(len=*), intent(in) :: versionString
-    integer, intent(out) :: parserVersion
 
-    select case(trim(versionString))
-    case("20.1")
-      parserVersion = 8
-    case("19.1")
-      parserVersion = 7
-    case("18.2")
-      parserVersion = 6
-    case("17.1", "18.1")
-      parserVersion = 5
-    case default
-      call detailedError(node, "Program version '"//trim(versionString)// &
-        & "' is not recognized")
-    end select
+    !> Input version node (needed for error messagess)
+    type(fnode), pointer :: node
 
-  end subroutine getParserVersion
+    !> Corresponding parser version.
+    integer :: parserVersion
+
+    integer :: ii
+
+    do ii = 1, size(versionMaps)
+      if (versionMaps(ii)%inputVersion == versionString) then
+        parserVersion = versionMaps(ii)%parserVersion
+        return
+      end if
+    end do
+
+    call detailedError(node, "Program version '"// trim(versionString) // "' is not recognized")
+
+  end function parserVersionFromInputVersion
 
 end module dftbp_parser
