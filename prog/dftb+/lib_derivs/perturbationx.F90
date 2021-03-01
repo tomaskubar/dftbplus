@@ -570,7 +570,7 @@ contains
 
           call total_shift(dPotential%intShell, dPotential%intAtom, orb, species)
           call total_shift(dPotential%intBlock, dPotential%intShell, orb, species)
-          if (allocate(dftbU) .or. allocated(onsMEs)) then
+          if (allocated(dftbU) .or. allocated(onsMEs)) then
             dPotential%intBlock(:,:,:,:) = dPotential%intBlock + dPotential%orbitalBlock
           end if
 
