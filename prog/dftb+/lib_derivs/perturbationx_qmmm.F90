@@ -156,18 +156,6 @@ contains
     !> Are there orbital potentials present
     type(TDftbU), intent(in), allocatable :: dftbU
 
-    !> prefactor for +U potential
-    real(dp), allocatable, intent(in) :: UJ(:,:)
-
-    !> Number DFTB+U blocks of shells for each atom type
-    integer, intent(in), allocatable :: nUJ(:)
-
-    !> which shells are in each DFTB+U block
-    integer, intent(in), allocatable :: iUJ(:,:,:)
-
-    !> Number of shells in each DFTB+U block
-    integer, intent(in), allocatable :: niUJ(:,:)
-
     !> equivalence mapping for dual charge blocks
     integer, intent(in), allocatable :: iEqBlockDftbu(:,:,:,:)
 
