@@ -255,7 +255,7 @@ contains
             & this%tWriteResultsTag, resultsTag, this%tWriteDetailedOut, this%fdDetailedOut,&
             & this%tMulliken)
         call dPsidxQMMM(env, this%parallelKS, this%filling, this%eigen, this%eigVecsReal,&
-            & this%qOutput, this%q0, this%ham, this%over, othis%rb, this%nAtom, this%species,&
+            & this%qOutput, this%q0, this%ham, this%over, this%orb, this%nAtom, this%species,&
             & this%neighbourList, this%nNeighbourSK, this%denseDesc, this%iSparseStart,&
             & this%img2CentCell, this%coord, this%sccCalc, this%maxSccIter, this%sccTol,&
             & this%nMixElements, this%nIneqOrb, this%iEqOrbitals, this%tempElec, this%Ef,&

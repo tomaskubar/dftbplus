@@ -11,6 +11,7 @@
 module dftbp_perturbxderivs
   use dftbp_accuracy
   use dftbp_blasroutines
+  use dftbp_blockpothelper, only : appendBlockReduced
   use dftbp_commontypes
   use dftbp_constants
   use dftbp_densedescr
@@ -642,7 +643,7 @@ contains
               call OrbitalEquiv_reduce(dqOut(:, :, :, iCart, iAt), iEqOrbitals, orb,&
                   & dqOutRed(:nIneqMixElements))
               if (allocated(dftbU)) then
-                call AppendBlock_reduce(dqBlockOut, iEqBlockDFTBU, orb, dqOutRed )
+                call appendBlockReduced(dqBlockOut, iEqBlockDFTBU, orb, dqOutRed)
               end if
               if (allocated(onsMEs)) then
                 call onsBlock_reduce(dqBlockOut, iEqBlockOnSite, orb, dqOutRed)

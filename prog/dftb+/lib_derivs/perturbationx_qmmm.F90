@@ -11,6 +11,7 @@
 module dftbp_perturbxderivs_qmmm
   use dftbp_accuracy
   use dftbp_blasroutines
+  use dftbp_blockpothelper, only : appendBlockReduced
   use dftbp_commontypes
   use dftbp_constants
   use dftbp_densedescr

@@ -3451,12 +3451,12 @@ contains
       call printReksInitInfo(this%reks, this%orb, this%speciesName, this%nType)
     end if
 
-    if (tXDerivs) then
-      if (t2Component) then
+    if (this%tXDerivs) then
+      if (this%t2Component) then
         call error("Coupled-perturbed equations are not compatible with this spinor Hamiltonian")
       end if
 
-      if (.not. tRealHS) then
+      if (.not. this%tRealHS) then
         call error("Coupled-perturbed equations do not support k-points")
       end if
     end if
