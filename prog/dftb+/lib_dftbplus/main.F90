@@ -96,6 +96,7 @@ module dftbp_main
   use dftbp_qdepextpotproxy, only : TQDepExtPotProxy
   use dftbp_taggedoutput, only : TTaggedWriter
   use dftbp_perturbxderivs
+  use dftbp_perturbxderivs_qmmm
   use dftbp_reks
   use dftbp_plumed, only : TPlumedCalc, TPlumedCalc_final
 #:if WITH_TRANSPORT
@@ -181,6 +182,13 @@ contains
       if (tXDerivs) then
         call dPsidx(env, parallelKS, filling, eigen, eigVecsReal, rhoPrim, potential, qOutput, q0,&
             & ham, over, skHamCont, skOverCont, nonSccDeriv, orb, nAtom, species, neighbourList,&
+            & nNeighbourSK, denseDesc, iSparseStart, img2CentCell, coord, sccCalc, maxSccIter,&
+            & sccTol, nMixElements, nIneqOrb, iEqOrbitals, tempElec, Ef, tFixEf, spinW, thirdOrd,&
+            & tDFTBU, UJ, nUJ, iUJ, niUJ, iEqBlockDftbu, onSiteElements, iEqBlockOnSite, rangeSep,&
+            & nNeighbourLC, pChrgMixer, taggedWriter, tWriteAutotest, autotestTag,&
+            & tWriteResultsTag, resultsTag, tWriteDetailedOut, fdDetailedOut, tMulliken)
+        call dPsidxQMMM(env, parallelKS, filling, eigen, eigVecsReal, qOutput, q0,&
+            & ham, over, orb, nAtom, species, neighbourList,&
             & nNeighbourSK, denseDesc, iSparseStart, img2CentCell, coord, sccCalc, maxSccIter,&
             & sccTol, nMixElements, nIneqOrb, iEqOrbitals, tempElec, Ef, tFixEf, spinW, thirdOrd,&
             & tDFTBU, UJ, nUJ, iUJ, niUJ, iEqBlockDftbu, onSiteElements, iEqBlockOnSite, rangeSep,&

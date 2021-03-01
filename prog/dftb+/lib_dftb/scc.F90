@@ -216,6 +216,9 @@ module dftbp_scc
     !> Set external charge field
     procedure :: setExternalCharges
 
+    !> Return external charge field
+    procedure :: getExternalCharges
+
     !> Update potential shifts
     procedure :: updateShifts
 
@@ -618,6 +621,37 @@ contains
     end if
 
   end subroutine setExternalCharges
+
+
+  !> get external charges
+  subroutine getExternalCharges(this, nCharge, chargeCoords, chargeQs, blurWidths)
+
+    !> Instance
+    class(TScc), intent(inout) :: this
+
+    !> Number of external charges
+    integer, intent(out) :: nCharge
+
+    !> Coordinates of external charges
+    real(dp), allocatable, intent(out) :: chargeCoords(:,:)
+
+    !> Magnitude of external charges
+    real(dp), allocatable, intent(out) :: chargeQs(:)
+
+    !> Spatial extension of external charge distribution
+    real(dp), allocatable, intent(out), optional :: blurWidths(:)
+
+    if (.not. allocated(this%extCharge)) then
+      nCharge = 0
+    else
+      if (present(blurWidths)) then
+        call this%extCharge%getExternalCharges(nCharge, chargeCoords, chargeQs, blurWidths=blurWidths)
+      else
+        call this%extCharge%getExternalCharges(nCharge, chargeCoords, chargeQs)
+      end if
+    end if
+
+  end subroutine getExternalCharges
 
 
   !> Routine for returning lower triangle of atomic resolved gamma as a matrix

@@ -27,7 +27,7 @@ set(Fortran_FLAGS "${CMAKE_Fortran_FLAGS}"
 set(Fortran_FLAGS_RELEASE "-O2 -funroll-all-loops"
   CACHE STRING "Fortran compiler flags for Release build")
 
-set(Fortran_FLAGS_DEBUG "-g -Wall -std=f2008ts -pedantic -fbounds-check"
+set(Fortran_FLAGS_DEBUG "-g -Wall -std=f2008 -pedantic -fbounds-check"
   CACHE STRING "Fortran compiler flags for Debug build")
 
 set(FYPP_FLAGS "" CACHE STRING "Flags for the preprocessor")

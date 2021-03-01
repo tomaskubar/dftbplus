@@ -4,6 +4,7 @@ set(sources-fpp
   ${curdir}/finiteT.F90
   ${curdir}/numderivs2.F90
   ${curdir}/perturbationx.F90
+  ${curdir}/perturbationx_qmmm.F90
   ${curdir}/rotateDegenerateOrbitals.F90)
 
 set(ALL-SOURCES-FPP ${ALL-SOURCES-FPP} ${sources-fpp} PARENT_SCOPE)
