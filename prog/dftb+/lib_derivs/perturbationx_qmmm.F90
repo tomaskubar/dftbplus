@@ -52,14 +52,13 @@ module dftbp_perturbxderivs_qmmm
 contains
 
   !> Static (frequency independent) perturbation at q=0
-  subroutine dPsidxQMMM(env, parallelKS, filling, eigvals, eigVecsReal,&
-      & qOrb, q0, ham, over, orb, nAtom, species,&
-      & neighbourList, nNeighbourSK, denseDesc, iSparseStart, img2CentCell, coord,&
+  subroutine dPsidxQMMM(env, parallelKS, filling, eigvals, eigVecsReal, qOrb, q0, ham, over, orb,&
+      & nAtom, species, neighbourList, nNeighbourSK, denseDesc, iSparseStart, img2CentCell, coord,&
       & sccCalc, maxSccIter, sccTol, nMixElements, nIneqMixElements, iEqOrbitals, tempElec, Ef,&
-      & tFixEf, spinW, thirdOrd, tDFTBU,UJ, nUJ, iUJ, niUJ, iEqBlockDftbu, onsMEs, iEqBlockOnSite,&
-      & rangeSep, nNeighbourLC, pChrgMixer, taggedWriter, tWriteAutoTest, autoTestTagFile,&
-      & tWriteTaggedOut, taggedResultsFile, tWriteDetailedOut, fdDetailedOut, tMulliken)
-
+      & tFixEf, spinW, thirdOrd, dftbU, iEqBlockDftbu, onsMEs, iEqBlockOnSite, rangeSep,&
+      & nNeighbourLC, pChrgMixer, taggedWriter, tWriteAutoTest, autoTestTagFile, tWriteTaggedOut,&
+      & taggedResultsFile, tWriteDetailedOut, fdDetailedOut, tMulliken)
+      
     !> Environment settings
     type(TEnvironment), intent(inout) :: env
 
@@ -154,8 +153,8 @@ contains
     !> Third order SCC interactions
     type(TThirdOrder), allocatable, intent(inout) :: thirdOrd
 
-    !> is this a +U calculation
-    logical, intent(in) :: tDftbU
+    !> Are there orbital potentials present
+    type(TDftbU), intent(in), allocatable :: dftbU
 
     !> prefactor for +U potential
     real(dp), allocatable, intent(in) :: UJ(:,:)
@@ -320,7 +319,7 @@ contains
       dRhoOutSqr => null()
     end if
 
-    if (tDFTBU .or. allocated(onsMEs)) then
+    if (allocated(dftbU) .or. allocated(onsMEs)) then
       allocate(dqBlockIn(orb%mOrb,orb%mOrb,nAtom,nSpin))
       allocate(dqBlockOut(orb%mOrb,orb%mOrb,nAtom,nSpin))
     end if
@@ -409,7 +408,7 @@ contains
         end if
 
         dqIn(:,:,:) = 0.0_dp
-        if (tDFTBU .or. allocated(onsMEs)) then
+        if (allocated(dftbU) .or. allocated(onsMEs)) then
           dqBlockIn(:,:,:,:) = 0.0_dp
           dqBlockOut(:,:,:,:) = 0.0_dp
         end if
@@ -436,7 +435,7 @@ contains
           dPotential%intShell(:,:,:) = 0.0_dp
           dPotential%intBlock(:,:,:,:) = 0.0_dp
 
-          if (tDFTBU .or. allocated(onsMEs)) then
+          if (allocated(dftbU) .or. allocated(onsMEs)) then
             dPotential%orbitalBlock(:,:,:,:) = 0.0_dp
           end if
 
@@ -461,10 +460,9 @@ contains
               dPotential%intShell(:,:,1) = dPotential%intShell(:,:,1) + shellPot(:,:,1)
             end if
 
-            if (tDFTBU) then
+            if (allocated(dftbU)) then
               ! note the derivatives of both FLL and pSIC are the same (pSIC, i.e. case 2 in module)
-              call getDftbUShift(dPotential%orbitalBlock, dqBlockIn, species,&
-                  & orb, 2, UJ, nUJ, niUJ, iUJ)
+              call dftbU%getDftbUShift(dPotential%orbitalBlock, dqBlockIn, species, orb)
             end if
             if (allocated(onsMEs)) then
               ! onsite corrections
@@ -476,7 +474,7 @@ contains
 
           call total_shift(dPotential%intShell, dPotential%intAtom, orb, species)
           call total_shift(dPotential%intBlock, dPotential%intShell, orb, species)
-          if (tDFTBU .or. allocated(onsMEs)) then
+          if (allocated(dftbU) .or. allocated(onsMEs)) then
             dPotential%intBlock(:,:,:,:) = dPotential%intBlock + dPotential%orbitalBlock
           end if
 
@@ -530,7 +528,7 @@ contains
           do iS = 1, nSpin
             call mulliken(dqOut(:, :, iS, iCart, iAt), over, dRho(:,iS), orb,&
                 & neighbourList%iNeighbour, nNeighbourSK, img2CentCell, iSparseStart)
-            if (tDFTBU .or. allocated(onsMEs)) then
+            if (allocated(dftbU) .or. allocated(onsMEs)) then
               dqBlockOut(:,:,:,iS) = 0.0_dp
               call mulliken(dqBlockOut(:,:,:,iS), over, dRho(:,iS), orb, neighbourList%iNeighbour,&
                   & nNeighbourSK, img2CentCell, iSparseStart)
@@ -545,8 +543,8 @@ contains
               dqOutRed = 0.0_dp
               call OrbitalEquiv_reduce(dqOut(:, :, :, iCart, iAt), iEqOrbitals, orb,&
                   & dqOutRed(:nIneqMixElements))
-              if (tDFTBU) then
-                call AppendBlock_reduce(dqBlockOut, iEqBlockDFTBU, orb, dqOutRed )
+              if (allocated(dftbU)) then
+                call appendBlockReduced(dqBlockOut, iEqBlockDFTBU, orb, dqOutRed)
               end if
               if (allocated(onsMEs)) then
                 call onsBlock_reduce(dqBlockOut, iEqBlockOnSite, orb, dqOutRed)
@@ -566,7 +564,7 @@ contains
                 else
                   dqIn(:,:,:) = dqOut(:, :, :, iCart, iAt)
                   dqInpRed(:) = dqOutRed(:)
-                  if (tDFTBU .or. allocated(onsMEs)) then
+                  if (allocated(dftbU) .or. allocated(onsMEs)) then
                     dqBlockIn(:,:,:,:) = dqBlockOut(:,:,:,:)
                   end if
                 end if
@@ -589,11 +587,11 @@ contains
 
                   call OrbitalEquiv_expand(dqInpRed(:nIneqMixElements), iEqOrbitals, orb, dqIn)
 
-                  if (tDFTBU .or. allocated(onsMEs)) then
+                  if (allocated(dftbU) .or. allocated(onsMEs)) then
                     dqBlockIn(:,:,:,:) = 0.0_dp
-                    if (tDFTBU) then
-                      call Block_expand( dqInpRed ,iEqBlockDFTBU, orb, dqBlockIn, species(:nAtom),&
-                          & nUJ, niUJ, iUJ, orbEquiv=iEqOrbitals )
+                    if (allocated(dftbU)) then
+                      call dftbU%expandBlock(dqInpRed, iEqBlockDFTBU, orb, dqBlockIn, species(:nAtom),&
+                          & orbEquiv=iEqOrbitals)
                     else
                       call Onsblock_expand(dqInpRed, iEqBlockOnSite, orb, dqBlockIn,&
                           & orbEquiv=iEqOrbitals)
