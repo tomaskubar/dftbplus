@@ -30,7 +30,7 @@ set(Fortran_FLAGS_RELEASE "-O2 -funroll-all-loops"
 set(Fortran_FLAGS_RELWITHDEBINFO "-g ${Fortran_FLAGS_RELEASE}"
   CACHE STRING "Fortran compiler flags for Release build")
 
-set(Fortran_FLAGS_DEBUG "-g -Wall -std=f2008ts -pedantic -fbounds-check"
+set(Fortran_FLAGS_DEBUG "-g -Wall -std=f2008 -pedantic -fbounds-check"
   CACHE STRING "Fortran compiler flags for Debug build")
 
 # Use intrinsic Fortran 2008 erf/erfc functions

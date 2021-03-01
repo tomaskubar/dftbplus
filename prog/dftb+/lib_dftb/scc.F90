@@ -16,7 +16,7 @@ module dftbp_scc
   use dftbp_chargeconstr
   use dftbp_commontypes
   use dftbp_constants
-  use dftbp_coulomb, only : TCoulombCont, TCoulombInput, init, sumInvR
+  use dftbp_coulomb, only : TCoulombCont, TCoulombInput, init, sumInvR, calcInvRPrime
   use dftbp_dynneighlist
   use dftbp_environment
   use dftbp_fileid
@@ -216,6 +216,9 @@ module dftbp_scc
     !> Set external charge field
     procedure :: setExternalCharges
 
+    !> Return external charge field
+    procedure :: getExternalCharges
+
     !> Update potential shifts
     procedure :: updateShifts
 
@@ -233,6 +236,9 @@ module dftbp_scc
 
     !> Calculates the contribution of the SCC to the forces
     procedure :: addForceDc
+
+    !> Derivative of the shift potentials with respect to atom positions
+    procedure :: addPotentialDeriv
 
     !> Calculates the contribution of the stress tensor
     procedure :: addStressDc
@@ -525,7 +531,7 @@ contains
     real(dp), intent(in) :: qOrbital(:,:,:)
 
     !> Reference charge distribution (neutral atoms)
-    real(dp), intent(in) :: q0(:,:,:)
+    real(dp), intent(in), optional :: q0(:,:,:)
 
     !> Contains information about the atomic orbitals in the system
     type(TOrbitals), intent(in) :: orb
@@ -538,8 +544,9 @@ contains
     call getSummedCharges(species, orb, qOrbital, q0, iHubbU=this%iHubbU, dQ=this%deltaQ, &
         & dQAtom=this%deltaQAtom, dQShell=this%deltaQPerLShell, dQUniqU=this%deltaQUniqU)
 
-    call this%coulombCont%updateCharges(env, qOrbital, q0, orb, species, &
-        & this%deltaQ, this%deltaQAtom, this%deltaQPerLShell, this%deltaQUniqU)
+    call this%coulombCont%updateCharges(env, qOrbital, q0, orb=orb, species=species, &
+        & deltaQ=this%deltaQ, deltaQAtom=this%deltaQAtom, deltaQPerLShell=this%deltaQPerLShell, deltaQUniqU=this%deltaQUniqU)
+
 
   end subroutine updateCharges
 
@@ -614,6 +621,37 @@ contains
     end if
 
   end subroutine setExternalCharges
+
+
+  !> get external charges
+  subroutine getExternalCharges(this, nCharge, chargeCoords, chargeQs, blurWidths)
+
+    !> Instance
+    class(TScc), intent(inout) :: this
+
+    !> Number of external charges
+    integer, intent(out) :: nCharge
+
+    !> Coordinates of external charges
+    real(dp), allocatable, intent(out) :: chargeCoords(:,:)
+
+    !> Magnitude of external charges
+    real(dp), allocatable, intent(out) :: chargeQs(:)
+
+    !> Spatial extension of external charge distribution
+    real(dp), allocatable, intent(out), optional :: blurWidths(:)
+
+    if (.not. allocated(this%extCharge)) then
+      nCharge = 0
+    else
+      if (present(blurWidths)) then
+        call this%extCharge%getExternalCharges(nCharge, chargeCoords, chargeQs, blurWidths=blurWidths)
+      else
+        call this%extCharge%getExternalCharges(nCharge, chargeCoords, chargeQs)
+      end if
+    end if
+
+  end subroutine getExternalCharges
 
 
   !> Routine for returning lower triangle of atomic resolved gamma as a matrix
@@ -844,6 +882,59 @@ contains
     end if
 
   end subroutine addForceDc
+
+
+  !> Derivative of the shift potentials with respect to atom positions
+  subroutine addPotentialDeriv(this, env, vAt, vShell, species, iNeighbour, img2CentCell, coord,&
+      & orb, iCart, iAt)
+
+    !> Instance
+    class(TScc), intent(in) :: this
+
+    !> Environment settings
+    type(TEnvironment), intent(in) :: env
+
+    !> Atomic part of derivative
+    real(dp), intent(inout) :: vAt(:)
+
+    !> Shell part of derivative
+    real(dp), intent(inout) :: vShell(:,:,:)
+
+    !> Chemical species of atoms
+    integer,  intent(in) :: species(:)
+
+    !> List of neighbours for each atom.
+    integer,  intent(in) :: iNeighbour(0:,:)
+
+    !> Indexing of images of the atoms in the central cell.
+    integer,  intent(in) :: img2CentCell(:)
+
+    !> Atomic coordinates
+    real(dp), intent(in) :: coord(:,:)
+
+    !> Contains information about the atomic orbitals in the system
+    type(TOrbitals), intent(in) :: orb
+
+    !> Cartesian component of displacement
+    integer, intent(in) :: iCart
+
+    !> Atom displaced
+    integer, intent(in) :: iAt
+
+    ! Short-range part of gamma contribution
+    call GammaPrimeV_(this, env, vShell, this%coord, species, iNeighbour, img2CentCell, orb, iCart,&
+        & iAt)
+
+    ! 1/R contribution
+    if (this%tPeriodic) then
+      call error("Missing at moment")
+    !  call invRPrime(vAt, nAtom_, coord, nNeighEwald_, iNeighbour, img2CentCell, gLatPoint_,&
+    !      & alpha_, volume_, deltaQAtom_, iCart, iAt)
+    else
+      call calcInvRPrime(this%nAtom, this%coord, this%deltaQAtom, iCart, iAt, vAt)
+    end if
+
+  end subroutine addPotentialDeriv
 
 
   !> Calculates the contribution of the stress tensor which is not covered in the term with the
@@ -1646,6 +1737,107 @@ contains
     call this%extCharge%copyInvRvec(QinvR)
 
   end subroutine getShiftOfPC
+
+
+  !> Calculate the derivative of the potential from the short range part of Gamma.
+  subroutine GammaPrimeV_(this, env, vprime, coord, species, iNeighbour, img2CentCell, orb, iCart,&
+      & iAt)
+
+    !> Instance of SCC solver
+    type(TScc), intent(in) :: this
+
+    !> Environment settings
+    type(TEnvironment), intent(in) :: env
+
+    !> Potential to add the contribution to
+    real(dp), intent(inout) :: vprime(:,:,:)
+
+    !> Atomic coordinates
+    real(dp), intent(in) :: coord(:,:)
+
+    !> Species for each atom.
+    integer,  intent(in) :: species(:)
+
+    !> List of neighbours for each atom.
+    integer,  intent(in) :: iNeighbour(0:,:)
+
+    !> Indexing of images of the atoms in the central cell.
+    integer,  intent(in) :: img2CentCell(:)
+
+    !> Contains information about the atomic orbitals in the system
+    type(TOrbitals), intent(in) :: orb
+
+    !> Direction of derivative
+    integer, intent(in) :: iCart
+
+    !> Differentiate with respect to position of this atom
+    integer, intent(in) :: iAt
+
+    integer :: iAt1, iAt2, iAt2f, iU1, iU2, iNeigh, iSp1, iSp2
+    real(dp) :: rab, tmpGammaPrime, tmpGamma, u1, u2, invRab
+    integer :: iSh1, iSh2, iAt1Start, iAt1End
+
+  #:if WITH_SCALAPACK
+    if (env%blacs%atomGrid%iProc /= -1) then
+      iAt1Start = env%blacs%atomGrid%iproc * this%nAtom / env%blacs%atomGrid%nproc + 1
+      iAt1End = (env%blacs%atomGrid%iproc + 1) * this%nAtom / env%blacs%atomGrid%nproc
+    else
+      ! Do not calculate anything if process is not part of the atomic grid
+      iAt1Start = 0
+      iAt1End = -1
+    end if
+  #:else
+    iAt1Start = 1
+    iAt1End = this%nAtom
+  #:endif
+
+    do iAt1 = iAt1Start, iAt1End
+      iSp1 = species(iAt1)
+      do iNeigh = 1, maxval(this%nNeighShort(:,:,:, iAt1))
+        iAt2 = iNeighbour(iNeigh, iAt1)
+        iAt2f = img2CentCell(iAt2)
+        if (iAt /= iAt2f .and. iAt /= iAt1) then
+          cycle
+        end if
+        iSp2 = species(iAt2f)
+        rab = sqrt(sum((coord(:,iAt1) - coord(:,iAt2))**2))
+        invRab = 1.0_dp / rab
+        do iSh1 = 1, orb%nShell(iSp1)
+          iU1 = this%iHubbU(iSh1, iSp1)
+          u1 = this%uniqHubbU(iU1, iSp1)
+          do iSh2 = 1, orb%nShell(iSp2)
+            iU2 = this%iHubbU(iSh2, iSp2)
+            u2 = this%uniqHubbU(iU2, iSp2)
+            if (iNeigh <= this%nNeighShort(iU2,iU1,species(iAt2f),iAt1)) then
+              if (this%tDampedShort(iSp1) .or. this%tDampedShort(iSp2)) then
+                tmpGammaPrime = expGammaDampedPrime(rab, u2, u1, this%dampExp)
+              else
+                tmpGammaPrime = expGammaPrime(rab, u2, u1)
+                if (this%tH5) then
+                  tmpGamma = expGamma(rab, u2, u1)
+                  call this%h5Correction%scaleShortGammaDeriv(tmpGamma, tmpGammaPrime, iSp1, iSp2,&
+                      & rab)
+                end if
+              end if
+              vprime(iSh1,iAt1,1) = vprime(iSh1,iAt1,1) &
+                  & +this%deltaQPerLShell(iSh2, iAt2f)*tmpGammaPrime &
+                  & *(coord(iCart,iAt1) - coord(iCart,iAt2)) * invRab
+              vprime(iSh2,iAt2f,1) = vprime(iSh2,iAt2f,1) &
+                  & -this%deltaQPerLShell(iSh1, iAt1)*tmpGammaPrime &
+                  & *(coord(iCart,iAt1) - coord(iCart,iAt2)) * invRab
+            end if
+          end do
+        end do
+      end do
+    end do
+
+    vprime(:,iAt,1) = -vprime(:,iAt,1)
+
+  #:if WITH_SCALAPACK
+    call mpifx_allreduceip(env%mpi%groupComm, vprime, MPI_SUM)
+  #:endif
+
+  end subroutine GammaPrimeV_
 
 
 end module dftbp_scc

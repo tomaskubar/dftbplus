@@ -11,7 +11,7 @@ module dftbp_wrappedintr
   implicit none
   private
 
-  public :: TWrappedInt1, TWrappedReal1, TWrappedLogical1
+  public :: TWrappedInt1, TWrappedReal1, TWrappedLogical1, TWrappedReal2, TWrappedCmplx2
 
   !> 1 dimensional integers
   type :: TWrappedInt1
@@ -27,5 +27,15 @@ module dftbp_wrappedintr
   type :: TWrappedLogical1
     logical, allocatable :: data(:)
   end type TWrappedLogical1
+
+  !> 2 dimensional real
+  type :: TWrappedReal2
+    real(dp), allocatable :: data(:,:)
+  end type TwrappedReal2
+
+  !> 2 dimensional complex
+  type :: TWrappedCmplx2
+    complex(dp), allocatable :: data(:,:)
+  end type TwrappedCmplx2
 
 end module dftbp_wrappedintr

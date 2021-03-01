@@ -34,6 +34,7 @@ module dftbp_coulomb
   public :: invRCluster, invRPeriodic, sumInvR, addInvRPrime, getOptimalAlphaEwald, getMaxGEwald
   public :: getMaxREwald, invRStress
   public :: addInvRPrimeXlbomd
+  public :: calcInvRPrime
   public :: ewaldReal, ewaldReciprocal, derivEwaldReal, derivEwaldReciprocal, derivStressEwaldRec
 
 
@@ -198,6 +199,13 @@ module dftbp_coulomb
     module procedure addInvRPrimeXlbomdCluster
     module procedure addInvRPrimeXlbomdPeriodic
   end interface addInvRPrimeXlbomd
+
+
+  !> 1/r^2 potential
+  interface calcInvRPrime
+    module procedure calcInvRPrimeCluster
+  end interface calcInvRPrime
+
 
   !> Maximal argument value of erf, after which it is constant
   real(dp), parameter :: erfArgLimit = 10.0_dp
@@ -528,7 +536,7 @@ contains
     real(dp), intent(in) :: qOrbital(:,:,:)
 
     !> Reference charge distribution (neutral atoms)
-    real(dp), intent(in) :: q0(:,:,:)
+    real(dp), intent(in), optional :: q0(:,:,:)
 
     !> Contains information about the atomic orbitals in the system
     type(TOrbitals), intent(in) :: orb
@@ -2517,6 +2525,48 @@ contains
 
   end subroutine addNeighbourContribsStress
 
+
+  !> Calculates the -1/R**2 deriv contribution for potentials for the non-periodic case, without
+  !> storing anything.
+  subroutine calcInvRPrimeCluster(nAtom, coord, deltaQAtom, iCart, iAt, vPrime)
+
+    !> Number of atoms.
+    integer, intent(in) :: nAtom
+
+    !> List of atomic coordinates.
+    real(dp), intent(in) :: coord(:,:)
+
+    !> List of charges on each atom.
+    real(dp), intent(in) :: deltaQAtom(:)
+
+    !> Component of derivative
+    integer, intent(in) :: iCart
+
+    !> Atom to differentiate wrt to
+    integer, intent(in) :: iAt
+
+    !> Contains the derivative of potential
+    real(dp), intent(inout) :: vprime(:)
+
+    integer :: jj
+    real(dp) :: dist, vect(3), fTmp
+
+    do jj = 1, nAtom
+
+      if (iAt == jj) then
+        cycle
+      end if
+
+      vect(:) = coord(:,iAt) - coord(:,jj)
+      dist = sqrt(sum(vect(:)**2))
+      fTmp = -vect(iCart) / (dist**3)
+
+      vprime(iAt) = vprime(iAt) + deltaQAtom(jj)*fTmp
+      vprime(jj) = vprime(jj) + deltaQAtom(iAt)*fTmp
+
+    end do
+
+  end subroutine calcInvRPrimeCluster
 
   !> Calculates the -1/R**2 deriv contribution for all atoms for the non-periodic case, without
   !> storing anything.

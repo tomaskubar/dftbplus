@@ -75,6 +75,9 @@ module dftbp_externalcharges
     !> Sets the external charges
     procedure, public :: setExternalCharges
 
+    !> Gets the external charges
+    procedure, public :: getExternalCharges
+
     !> Adds energy contributions per atom
     procedure, public :: addEnergyPerAtom
 
@@ -164,6 +167,45 @@ contains
 
   end subroutine setExternalCharges
     
+
+  !> Returns the external point charges.
+  !>
+  subroutine getExternalCharges(this, nCharge, chargeCoords, chargeQs, blurWidths)
+
+    !> Instance
+    class(TExtCharge), intent(inout) :: this
+
+    !> Number of external charges
+    integer, intent(out) :: nCharge
+
+    !> Coordinates of the external charges as (3, nExtCharges) array
+    real(dp), allocatable, intent(out) :: chargeCoords(:,:)
+
+    !> Charges of the point charges (sign: eletron is positive)
+    real(dp), allocatable, intent(out) :: chargeQs(:)
+
+    !> Width of the Gaussians if the charges are blurred
+    real(dp), allocatable, intent(out), optional :: blurWidths(:)
+
+    if (this%nChrg > 0) then
+      nCharge = this%nChrg
+
+      allocate(chargeCoords(3, this%nChrg))
+      chargeCoords(:,:) = this%coords(:,:)
+
+      allocate(chargeQs(this%nChrg))
+      chargeQs(:) = this%charges(:)
+
+      if (present(blurWidths)) then
+        allocate(blurWidths(this%nChrg))
+        blurWidths(:) = this%blurWidths(:)
+      end if
+    else
+      nCharge = 0
+    end if
+
+  end subroutine getExternalCharges
+
 
   !> Updates the module, if the lattice vectors had been changed
   subroutine setLatticeVectors(this, latVecs, recVecs)

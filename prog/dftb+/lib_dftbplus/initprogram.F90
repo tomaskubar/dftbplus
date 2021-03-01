@@ -504,6 +504,9 @@ module dftbp_initprogram
 
     !> Pipek-Mezey localisation calculator
     type(TPipekMezey), allocatable :: pipekMezey
+    
+    !> Shall derivatives wrt atomic coordinates be evaluated?
+    logical :: tXDerivs
 
     !> use commands from socket communication to control the run
     logical :: tSocket
@@ -1823,7 +1826,7 @@ contains
        call error("This ForceEvaluation method requires the electron temperature to be zero")
      end if
 
-     tRequireDerivator = this%tForces
+     tRequireDerivator = this%tForces .or. input%ctrl%tXDerivs
      if (.not. tRequireDerivator .and. allocated(input%ctrl%elecDynInp)) then
        tRequireDerivator = input%ctrl%elecDynInp%tIons
      end if
@@ -2208,6 +2211,9 @@ contains
       call error("Localisation of electronic states currently unsupported for non-collinear and&
           & spin orbit calculations")
     end if
+
+    !> x derivatives (first steps for properties vibrational modes and dq/dx)
+    this%tXDerivs = input%ctrl%tXDerivs
 
     if (this%isLinResp) then
 
@@ -3443,6 +3449,16 @@ contains
 
     if (allocated(this%reks)) then
       call printReksInitInfo(this%reks, this%orb, this%speciesName, this%nType)
+    end if
+
+    if (tXDerivs) then
+      if (t2Component) then
+        call error("Coupled-perturbed equations are not compatible with this spinor Hamiltonian")
+      end if
+
+      if (.not. tRealHS) then
+        call error("Coupled-perturbed equations do not support k-points")
+      end if
     end if
 
     call env%globalTimer%stopTimer(globalTimers%globalInit)

@@ -95,6 +95,8 @@ module dftbp_main
   use dftbp_timeprop
   use dftbp_qdepextpotproxy, only : TQDepExtPotProxy
   use dftbp_taggedoutput, only : TTaggedWriter
+  use dftbp_perturbxderivs
+  use dftbp_perturbxderivs_qmmm
   use dftbp_reks
   use dftbp_plumed, only : TPlumedCalc, TPlumedCalc_final
   use dftbp_determinants
@@ -240,6 +242,30 @@ contains
           & this%totalLatDeriv, this%extLatDerivs, this%normOrigLatVec, this%tLatOptFixAng,&
           & this%tLatOptFixLen, this%tLatOptIsotropic, constrLatDerivs)
 
+      if (this%tXDerivs) then
+        call dPsidx(env, this%parallelKS, this%filling, this%eigen, this%eigVecsReal, this%rhoPrim,&
+            & this%potential, this%qOutput, this%q0, this%ham, this%over, this%skHamCont,&
+            & this%skOverCont, this%nonSccDeriv, this%orb, this%nAtom, this%species,&
+            & this%neighbourList, this%nNeighbourSK, this%denseDesc, this%iSparseStart,&
+            & this%img2CentCell, this%coord, this%sccCalc, this%maxSccIter, this%sccTol,&
+            & this%nMixElements, this%nIneqOrb, this%iEqOrbitals, this%tempElec, this%Ef,&
+            & this%tFixEf, this%spinW, this%thirdOrd, this%dftbU, this%iEqBlockDftbu,&
+            & this%onSiteElements, this%iEqBlockOnSite, this%rangeSep, this%nNeighbourLC,&
+            & this%pChrgMixer, this%taggedWriter, this%tWriteAutotest, autotestTag,&
+            & this%tWriteResultsTag, resultsTag, this%tWriteDetailedOut, this%fdDetailedOut,&
+            & this%tMulliken)
+        call dPsidxQMMM(env, this%parallelKS, this%filling, this%eigen, this%eigVecsReal,&
+            & this%qOutput, this%q0, this%ham, this%over, othis%rb, this%nAtom, this%species,&
+            & this%neighbourList, this%nNeighbourSK, this%denseDesc, this%iSparseStart,&
+            & this%img2CentCell, this%coord, this%sccCalc, this%maxSccIter, this%sccTol,&
+            & this%nMixElements, this%nIneqOrb, this%iEqOrbitals, this%tempElec, this%Ef,&
+            & this%tFixEf, this%spinW, this%thirdOrd, this%dftbU, this%iEqBlockDftbu,&
+            & this%onSiteElements, this%iEqBlockOnSite, this%rangeSep, this%nNeighbourLC,&
+            & this%pChrgMixer, this%taggedWriter, this%tWriteAutotest, autotestTag,&
+            & this%tWriteResultsTag, resultsTag, this%tWriteDetailedOut, this%fdDetailedOut,&
+            & this%tMulliken)
+      end if
+      
       if (tExitGeoOpt) then
         exit geoOpt
       end if

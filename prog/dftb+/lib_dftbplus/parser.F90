@@ -4829,6 +4829,10 @@ contains
     endif
   #:endif
 
+    if (tHaveEigenDecomposition) then
+      call getChildValue(node, "CoordDerivs", ctrl%tXDerivs, .false.)
+    end if
+
 
   end subroutine readAnalysis
 
