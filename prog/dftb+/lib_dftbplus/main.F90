@@ -243,6 +243,8 @@ contains
           & this%tLatOptFixLen, this%tLatOptIsotropic, constrLatDerivs)
 
       if (this%tXDerivs) then
+        call env%globalTimer%startTimer(globalTimers%perturb)
+        call env%globalTimer%startTimer(globalTimers%perturbQM)
         call dPsidx(env, this%parallelKS, this%filling, this%eigen, this%eigVecsReal, this%rhoPrim,&
             & this%potential, this%qOutput, this%q0, this%ham, this%over, this%skHamCont,&
             & this%skOverCont, this%nonSccDeriv, this%orb, this%nAtom, this%species,&
@@ -254,6 +256,8 @@ contains
             & this%pChrgMixer, this%taggedWriter, this%tWriteAutotest, autotestTag,&
             & this%tWriteResultsTag, resultsTag, this%tWriteDetailedOut, this%fdDetailedOut,&
             & this%tMulliken)
+        call env%globalTimer%stopTimer(globalTimers%perturbQM)
+        call env%globalTimer%startTimer(globalTimers%perturbMM)
         call dPsidxQMMM(env, this%parallelKS, this%filling, this%eigen, this%eigVecsReal,&
             & this%qOutput, this%q0, this%ham, this%over, this%orb, this%nAtom, this%species,&
             & this%neighbourList, this%nNeighbourSK, this%denseDesc, this%iSparseStart,&
@@ -264,6 +268,8 @@ contains
             & this%pChrgMixer, this%taggedWriter, this%tWriteAutotest, autotestTag,&
             & this%tWriteResultsTag, resultsTag, this%tWriteDetailedOut, this%fdDetailedOut,&
             & this%tMulliken)
+        call env%globalTimer%stopTimer(globalTimers%perturbMM)
+        call env%globalTimer%stopTimer(globalTimers%perturb)
       end if
       
       if (tExitGeoOpt) then

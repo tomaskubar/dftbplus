@@ -154,7 +154,7 @@ contains
     !> Third order SCC interactions
     type(TThirdOrder), allocatable, intent(inout) :: thirdOrd
 
-    !> Are there orbital potentials present
+    !> DFTB+U functional (if used)
     type(TDftbU), intent(in), allocatable :: dftbU
 
     !> equivalence mapping for dual charge blocks
@@ -640,11 +640,11 @@ contains
     if (tMulliken .or. tSccCalc) then
       write (stdOut, *)
       write (stdOut, *) 'Charge derivatives'
-      do iAt = 1, nAtom
-        write (stdOut,"(A,I0)") '/d Atom_', iAt
+      do iAt = 1, nExtCharge
+        write (stdOut,"(A,I0)") '/d MMcharge_', iAt
         do iS = 1, nSpin
           do jAt = 1, nAtom
-            write (stdOut, *) jAt, -sum(dqOut(:, jAt, iS, :, iAt), dim=1)
+            write (stdOut, '(I3,3F11.6)') jAt, -sum(dqOut(:, jAt, iS, :, iAt), dim=1)
           end do
           write (stdOut, *)
         end do
