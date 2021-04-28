@@ -47,8 +47,8 @@ module dftbp_perturbxderivs
   private
   public :: dPsidx
 
-  !> Direction labels
-  character(len=1), parameter :: direction(3) = ['x','y','z']
+! !> Direction labels
+! character(len=1), parameter :: direction(3) = ['x','y','z']
 
 contains
 
@@ -59,7 +59,7 @@ contains
       & nMixElements, nIneqMixElements, iEqOrbitals, tempElec, Ef, tFixEf, spinW, thirdOrd, dftbU,&
       & iEqBlockDftbu, onsMEs, iEqBlockOnSite, rangeSep, nNeighbourLC, pChrgMixer, taggedWriter,&
       & tWriteAutoTest, autoTestTagFile, tWriteTaggedOut, taggedResultsFile, tWriteDetailedOut,&
-      & fdDetailedOut, tMulliken)
+      & fdDetailedOut, tMulliken, dQdX)
 
     !> Environment settings
     type(TEnvironment), intent(inout) :: env
@@ -169,7 +169,7 @@ contains
 
     !> Third order SCC interactions
     type(TThirdOrder), allocatable, intent(inout) :: thirdOrd
-    
+
     !> DFTB+U functional (if used)
     type(TDftbU), intent(in), allocatable :: dftbU
 
@@ -210,7 +210,10 @@ contains
     !> Should Mulliken populations be generated/output
     logical, intent(in) :: tMulliken
 
-    integer :: iS, iK, iKS, iAt, iCart, iLev, iSh, iSp, jAt, iOrb, jCart
+    !> Output, charge derivatives
+    real(dp), allocatable, intent(out) :: dQdX(:,:,:)
+
+    integer :: iS, iK, iKS, iAt, iCart, iLev, iSh, iSp, jAt, iOrb ! jCart
 
     integer :: nSpin, nKpts, nOrbs, nIndepHam
 
@@ -265,12 +268,17 @@ contains
     ! non-variational part of charge derivative
     real(dp), allocatable :: dqNonVariational(:,:,:), dqNonVariationalBlock(:,:,:,:)
 
-    real(dp) :: dDipole(3)
+    ! derivative of shift due to external charges w.r.t. coordinates of an atom
+    real(dp), allocatable :: extShiftDerivative(:,:,:)
+
+  ! real(dp) :: dDipole(3)
 
     ! possibly missing in the 3rd order calculation?
     integer :: iAt1
     real(dp), allocatable :: dGamma3(:,:), qAtom(:)
     real(dp), allocatable :: vAt3(:,:), vdgamma3(:,:,:)
+
+  ! real(dp), allocatable :: testMatrix(:,:)
 
 
     if (tFixEf) then
@@ -300,6 +308,8 @@ contains
 
     allocate(dqNonVariational(orb%mOrb,nAtom,nSpin))
 
+    allocate(extShiftDerivative(3, nAtom, nSpin))
+
     allocate(eCiReal(size(eigVecsReal,dim=1), size(eigVecsReal,dim=2), size(eigVecsReal,dim=3)))
     do iKS = 1, size(eigVecsReal,dim=3)
       do iOrb = 1, size(eigVecsReal,dim=2)
@@ -315,7 +325,7 @@ contains
 
     ! terms v S' and v' S
     if (tSccCalc) then
-      allocate(sOmega(size(ham,dim=1),nSpin,2))
+      allocate(sOmega(size(ham,dim=1),nSpin,3))
       allocate(vAt(nAtom,nSpin))
       allocate(vdgamma(orb%mShell,nAtom,nSpin))
     end if
@@ -402,6 +412,9 @@ contains
       allocate(qAtom(nAtom))
     end if
 
+  ! write (*,*) "potential intBlock"
+  ! write (*,'(4F8.5)') potential%intBlock
+
     ! Displaced atom to differentiate wrt
     lpAtom: do iAt = 1, nAtom
 
@@ -411,47 +424,53 @@ contains
       call nonSccDeriv%getFirstDerivWhole(dH0, env, skHamCont, coord, species, iAt, orb,&
           & nNeighbourSK, neighbourList%iNeighbour, iSparseStart, img2centcell)
 
+      extShiftDerivative = 0.0_dp
+      call sccCalc%getExtShiftDerivative(env, extShiftDerivative(:,:,1), iAt, coord)
+      do iS = 1, nSpin
+        extShiftDerivative(:,:,iS) = extShiftDerivative(:,:,1)
+      end do
+
       ! perturbation direction
       lpCart: do iCart = 1, 3
 
-        write (stdOut,*) 'Calculating derivative for displacement along ',&
-            & trim(direction(iCart)),' for atom', iAt
+      ! write (stdOut,*) 'Calculating derivative for displacement along ',&
+      !     & trim(direction(iCart)),' for atom', iAt
 
         ! derivatives of 3rd order Gamma matrices w.r.t. atom coordinates
         if (allocated(thirdOrd)) then
           call thirdOrd%getGamma3Deriv(species, coord, iAt, iCart, dGamma3)
-          write (*,*) "dGamma3"
-          write (*,'(3F12.7)') dGamma3
+        ! write (*,*) "dGamma3"
+        ! write (*,'(3F12.7)') dGamma3
         end if
 
         ! derivatives of 3rd order Gamma matrices w.r.t. atom coordinates -- NEW IMPLEMENTATION
-        vdgamma3(:,:,:) = 0.0_dp
-        vAt3(:,:) = 0.0_dp
         if (allocated(thirdOrd)) then
+          vdgamma3(:,:,:) = 0.0_dp
+          vAt3(:,:) = 0.0_dp
           call thirdOrd%updateCoordsCP(species, coord, iAt, iCart)
           call thirdOrd%updateChargesCP(species)
           call thirdOrd%getShiftNonvariationalDeriv(vAt3(:,1), vdgamma3(:,:,1))
-          write (*,*) "vat3"
-          write (*,'(2X,F12.6)') vAt3
+        ! write (*,*) "vat3"
+        ! write (*,'(2X,F12.6)') vAt3
           call total_shift(vdgamma3, vAt3, orb, species)
-          write (*,*) "vdgamma3 -- total result"
-          write (*,'(2X,F12.6)') vdgamma3
+        ! write (*,*) "vdgamma3 -- total result"
+        ! write (*,'(2X,F12.6)') vdgamma3
         end if
 
         ! Tomas Kubar -- just for printing
-        vdgamma3(:,:,:) = 0.0_dp
-        vAt3(:,:) = 0.0_dp
         if (allocated(thirdOrd)) then
+          vdgamma3(:,:,:) = 0.0_dp
+          vAt3(:,:) = 0.0_dp
           ! 1/3 sum_C ( dGamma_CA/dx Dq_C^2 + 2 dGamma_AC/dx Dq_A Dq_C )
           qAtom(:) = sum(qOrb(:,:,1) - q0(:,:,1), dim=1)
           do iAt1 = 1, nAtom
             vAt3(:,1) = vAt3(:,1) + dGamma3(iAt1, :) * qAtom(iAt1)**2._dp + 2._dp * dGamma3(:, iAt1) * qAtom(iAt1) * qAtom(:)
           end do
           call total_shift(vdgamma3, vAt3, orb, species)
-          write (*,*) "vat3 -- original"
-          write (*,'(2X,F12.6)') vAt3
-          write (*,*) "vdgamma3 -- original, total result"
-          write (*,'(2X,F12.6)') vdgamma3
+        ! write (*,*) "vat3 -- original"
+        ! write (*,'(2X,F12.6)') vAt3
+        ! write (*,*) "vdgamma3 -- original, total result"
+        ! write (*,'(2X,F12.6)') vdgamma3
         end if
 
         if (tSccCalc) then
@@ -459,6 +478,31 @@ contains
           ! First part, omega dS
           call add_shift(sOmega(:,:,1), dOver(:,iCart), nNeighbourSK, neighbourList%iNeighbour,&
               & species, orb, iSparseStart, nAtom, img2CentCell, potential%intBlock)
+        ! write (*,*) "potential intBlock"
+        ! write (*,'(4F8.5)') potential%intBlock
+          ! Third part, dOmega from QM/MM interactions * S
+          call add_shift(sOmega(:,:,3), over, nNeighbourSK, neighbourList%iNeighbour, species,&
+              & orb, iSparseStart, nAtom, img2CentCell, extShiftDerivative(iCart,:,:))
+        ! write (*,*) "extShiftDerivative"
+        ! write (*,'(2X,F12.6)') extShiftDerivative(iCart,:,:)
+
+        ! allocate(testMatrix(nOrbs, nOrbs))
+        ! testMatrix(:,:) = 0.0_dp
+        ! call unpackHS(testMatrix, over, neighbourList%iNeighbour, nNeighbourSK, denseDesc%iAtomStart,&
+        !     & iSparseStart, img2CentCell)
+        ! write (*,*) "overlap"
+        ! write (*,'(5F8.4)') testMatrix
+        ! testMatrix(:,:) = 0.0_dp
+        ! call unpackHS(testMatrix, sOmega(:,1,1), neighbourList%iNeighbour, nNeighbourSK, denseDesc%iAtomStart,&
+        !     & iSparseStart, img2CentCell)
+        ! write (*,*) "sOmega 1"
+        ! write (*,'(5F8.4)') testMatrix
+        ! testMatrix(:,:) = 0.0_dp
+        ! call unpackHS(testMatrix, sOmega(:,1,3), neighbourList%iNeighbour, nNeighbourSK, denseDesc%iAtomStart,&
+        !     & iSparseStart, img2CentCell)
+        ! write (*,*) "sOmega 3"
+        ! write (*,'(5F8.4)') testMatrix
+        ! deallocate(testMatrix)
         end if
 
         if (tSccCalc) then
@@ -471,7 +515,10 @@ contains
           call sccCalc%addPotentialDeriv(env, vAt(:,1), vdgamma, species, neighbourList%iNeighbour,&
               & img2CentCell, coord, orb, iCart, iAt)
 
-          ! Tomas Kubar -- was this missing previously?
+        ! write (*,*) "VAT before 3rd order"
+        ! write (*,'(2F8.5)') vAt
+
+          ! Tomas Kubar -- this was missing previously
           if (allocated(thirdOrd)) then
             ! 1/3 sum_C ( dGamma_CA/dx Dq_C^2 + 2 dGamma_AC/dx Dq_A Dq_C )
             qAtom(:) = sum(qOrb(:,:,1) - q0(:,:,1), dim=1)
@@ -481,7 +528,16 @@ contains
             end do
           end if
 
+        ! write (*,*) "VDGAMMA pre"
+        ! write (*,'(2F8.5)') vdgamma
+
+        ! write (*,*) "VAT"
+        ! write (*,'(2F8.5)') vAt
+
           call total_shift(vdgamma, vAt, orb, species)
+
+        ! write (*,*) "VDGAMMA post"
+        ! write (*,'(2F8.5)') vdgamma
 
         end if
 
@@ -492,6 +548,8 @@ contains
             call mulliken(dqNonVariational(:,:,iS), dOver(:,iCart), rhoPrim(:,iS), orb,&
                 & neighbourList%iNeighbour, nNeighbourSK, img2CentCell, iSparseStart)
           end do
+        ! write (*,*) "dqNonVariational"
+        ! write (*,'(2F8.5)') dqNonVariational
           if (allocated(dftbU) .or. allocated(onsMEs)) then
             dqNonVariationalBlock(:,:,:,:) = 0.0_dp
             do iS = 1, nSpin
@@ -517,9 +575,9 @@ contains
           end if
         end if
 
-        if (tSccCalc) then
-          write (stdOut, "(1X,A,T12,A)") 'SCC Iter' , 'Error'
-        end if
+      ! if (tSccCalc) then
+      !   write (stdOut, "(1X,A,T12,A)") 'SCC Iter' , 'Error'
+      ! end if
 
         iSCCIter = 1
         tStopSCC = .false.
@@ -538,7 +596,9 @@ contains
           if (tSccCalc .and. iSCCiter>1) then
             call sccCalc%updateCharges(env, dqIn+dqNonVariational, orb=orb, species=species)
             call sccCalc%updateShifts(env, orb, species, neighbourList%iNeighbour, img2CentCell)
-            call sccCalc%getShiftPerAtom(dPotential%intAtom(:,1))
+            ! Tomas Kubar -- need a special version of getShiftPerAtomCP
+            !   to avoid a weird, spurious contribution from ext. charges being added
+            call sccCalc%getShiftPerAtomCP(dPotential%intAtom(:,1))
             call sccCalc%getShiftPerL(dPotential%intShell(:,:,1))
 
             if (allocated(spinW)) then
@@ -558,8 +618,8 @@ contains
 
             if (allocated(dftbU)) then
               ! note the derivatives of both FLL and pSIC are the same (pSIC, i.e. case 2 in module)
-              call dftbU%getDftbUShift(dPotential%orbitalBlock, dqBlockIn+dqNonVariationalBlock, species,&
-                  & orb)
+              call dftbU%getDftbUShift(dPotential%orbitalBlock, dqBlockIn+dqNonVariationalBlock,&
+                  & species, orb)
             end if
             if (allocated(onsMEs)) then
               ! onsite corrections
@@ -580,9 +640,21 @@ contains
             ! add the (Delta q) * d gamma / dx term
             call add_shift(sOmega(:,:,2), over, nNeighbourSK, neighbourList%iNeighbour, species,&
                 & orb, iSparseStart, nAtom, img2CentCell, vdgamma)
+          ! allocate(testMatrix(nOrbs, nOrbs))
+          ! call unpackHS(testMatrix, sOmega(:,1,2), neighbourList%iNeighbour, nNeighbourSK, denseDesc%iAtomStart,&
+          !     & iSparseStart, img2CentCell)
+          ! write (*,*) "sOmega 2 (1st part)"
+          ! write (*,'(5F8.4)') testMatrix
+          ! deallocate(testMatrix)
             ! and add gamma * d (Delta q) / dx
             call add_shift(sOmega(:,:,2), over, nNeighbourSK, neighbourList%iNeighbour, species,&
                 & orb, iSparseStart, nAtom, img2CentCell, dPotential%intBlock)
+          ! allocate(testMatrix(nOrbs, nOrbs))
+          ! call unpackHS(testMatrix, sOmega(:,1,2), neighbourList%iNeighbour, nNeighbourSK, denseDesc%iAtomStart,&
+          !     & iSparseStart, img2CentCell)
+          ! write (*,*) "sOmega 2"
+          ! write (*,'(5F8.4)') testMatrix
+          ! deallocate(testMatrix)
           end if
 
           dHam = 0.0_dp
@@ -591,6 +663,29 @@ contains
 
           if (tSccCalc) then
             dHam(:,:) = dHam + sOmega(:,:,1) + sOmega(:,:,2)
+
+          ! allocate(testMatrix(nOrbs, nOrbs))
+
+          ! testMatrix(:,:) = 0.0_dp
+          ! call unpackHS(testMatrix, dH0(:,iCart), neighbourList%iNeighbour, nNeighbourSK, denseDesc%iAtomStart,&
+          !     & iSparseStart, img2CentCell)
+          ! write (*,*) "dH0"
+          ! write (*,'(5F8.4)') testMatrix
+
+          ! testMatrix(:,:) = 0.0_dp
+          ! call unpackHS(testMatrix, dHam(:,1), neighbourList%iNeighbour, nNeighbourSK, denseDesc%iAtomStart,&
+          !     & iSparseStart, img2CentCell)
+          ! write (*,*) "dHam without sOmega 3"
+          ! write (*,'(5F8.4)') testMatrix
+
+            dHam(:,:) = dHam + sOmega(:,:,3)
+
+          ! testMatrix(:,:) = 0.0_dp
+          ! call unpackHS(testMatrix, dHam(:,1), neighbourList%iNeighbour, nNeighbourSK, denseDesc%iAtomStart,&
+          !     & iSparseStart, img2CentCell)
+          ! write (*,*) "dHam with sOmega 3"
+          ! write (*,'(5F8.4)') testMatrix
+          ! deallocate(testMatrix)
           end if
 
           if (nSpin > 1) then
@@ -652,7 +747,11 @@ contains
             end if
             sccErrorQ = maxval(abs(dqDiffRed))
 
-            write(stdOut,"(1X,I0,T10,E20.12)")iSCCIter, sccErrorQ
+          ! do jAt = 1, nAtom
+          !   write (stdOut, '(A,I3,3F11.6)') "iter dQ/da ", jAt,&
+          !       & sum(dqOut(:, jAt, :, iCart, iAt)+dqNonVariational(:, jAt, :), dim=1)
+          ! end do
+          ! write(stdOut,"(1X,I0,T10,E20.12)") iSCCIter, sccErrorQ
             tConverged = (sccErrorQ < sccTol)
 
             if ((.not. tConverged) .and. iSCCiter /= maxSccIter) then
@@ -689,8 +788,8 @@ contains
                   if (allocated(dftbU) .or. allocated(onsMEs)) then
                     dqBlockIn(:,:,:,:) = 0.0_dp
                     if (allocated(dftbU)) then
-                      call dftbU%expandBlock(dqInpRed ,iEqBlockDFTBU, orb, dqBlockIn, species(:nAtom),&
-                          & orbEquiv=iEqOrbitals )
+                      call dftbU%expandBlock(dqInpRed, iEqBlockDFTBU, orb, dqBlockIn,&
+                          & species(:nAtom), orbEquiv=iEqOrbitals)
                     else
                       call Onsblock_expand(dqInpRed, iEqBlockOnSite, orb, dqBlockIn,&
                           & orbEquiv=iEqOrbitals)
@@ -739,15 +838,15 @@ contains
 
     end do lpAtom
 
-    write (stdOut, *) 'dEi'
-    do iCart = 1, 3
-      write (stdOut, *) iCart
-      do iS = 1, nSpin
-        do iAt = 1, nAtom
-          write (stdOut, *) dEi(:, iAt, iS, iCart) ! * Hartree__eV
-        end do
-      end do
-    end do
+  ! write (stdOut, *) 'dEi'
+  ! do iCart = 1, 3
+  !   write (stdOut, *) iCart
+  !   do iS = 1, nSpin
+  !     do iAt = 1, nAtom
+  !       write (stdOut, *) dEi(:, iAt, iS, iCart) ! * Hartree__eV
+  !     end do
+  !   end do
+  ! end do
 
     if (tMulliken .or. tSccCalc) then
       write (stdOut, *)
@@ -763,20 +862,31 @@ contains
       end do
       write (stdOut, *)
 
-      write (stdOut, *) 'Born effective charges'
-      ! i.e. derivative of dipole moment wrt to atom positions, or equivalently derivative of forces
-      ! wrt to a homogeneous electric field
+      ! save output -- spin channel 1
+      if (allocated(dQdX)) then
+        deallocate(dQdX)
+      end if
+      allocate(dQdX(nAtom, 3, nAtom))
       do iAt = 1, nAtom
         do iCart = 1, 3
-          do jCart = 1, 3
-            dDipole(jCart) = -sum(sum(dqOut(:, : , 1, iCart, iAt), dim=1) * coord(jCart, :))
-          end do
-          dDipole(iCart) = dDipole(iCart) -sum(qOrb(:,iAt,1) - q0(:,iAt,1))
-          write (stdOut,*) dDipole
+          dQdX(:, iCart, iAt) = sum(dqOut(:, :, 1, iCart, iAt), dim=1)
         end do
-        write (stdOut, *)
       end do
-      write (stdOut, *)
+
+    ! write (stdOut, *) 'Born effective charges'
+    ! ! i.e. derivative of dipole moment wrt to atom positions, or equivalently derivative of forces
+    ! ! wrt to a homogeneous electric field
+    ! do iAt = 1, nAtom
+    !   do iCart = 1, 3
+    !     do jCart = 1, 3
+    !       dDipole(jCart) = -sum(sum(dqOut(:, : , 1, iCart, iAt), dim=1) * coord(jCart, :))
+    !     end do
+    !     dDipole(iCart) = dDipole(iCart) -sum(qOrb(:,iAt,1) - q0(:,iAt,1))
+    !     write (stdOut,*) dDipole
+    !   end do
+    !   write (stdOut, *)
+    ! end do
+    ! write (stdOut, *)
 
     end if
 
@@ -898,6 +1008,9 @@ contains
 
     real(dp), allocatable :: dFilling(:)
 
+  ! real(dp), allocatable :: Xi(:,:)
+  ! integer :: iOrb, jOrb
+
     iK = parallelKS%localKS(1, iKS)
     iS = parallelKS%localKS(2, iKS)
 
@@ -971,18 +1084,37 @@ contains
     do iFilled = 1, nFilled(iS)
       do iEmpty = 1, nOrb
         if (iFilled == iEmpty) then
+        ! write (*,'(A,2I3)') "workLocal diagonal ", iFilled, iEmpty
           workLocal(iFilled, iFilled) = -0.5_dp * sum(work2Local(:, iFilled))
         else
           if (.not. transform%degenerate(iFilled, iEmpty)) then
+          ! write (*,'(A,2I3)') "workLocal non-diagonal non-zero ", iEmpty, iFilled
             workLocal(iEmpty, iFilled) = workLocal(iEmpty, iFilled)&
                 & / (eigvals(iFilled, iK, iS) - eigvals(iEmpty, iK, iS))
           else
+          ! write (*,'(A,2I3)') "workLocal non-diagonal zero ", iEmpty, iFilled
+          ! write (*,'(A,2I3)') "workLocal non-diagonal zero ", iFilled, iEmpty
             workLocal(iEmpty, iFilled) = 0.0_dp
             workLocal(iFilled, iEmpty) = 0.0_dp
           end if
         end if
       end do
     end do
+
+  ! write (*,*) "U matrix"
+  ! write (*,'(5F8.4)') workLocal
+
+  ! ! TEST -- Xi matrix
+  ! allocate(Xi(nOrb,nOrb))
+  ! do iOrb = 1, nOrb
+  !   do jOrb = 1, nOrb
+  !     Xi(iOrb,jOrb) = filling(jOrb,1,1) * workLocal(iOrb,jOrb)&
+  !                 & + filling(iOrb,1,1) * workLocal(jOrb,iOrb)
+  !   end do
+  ! end do
+  ! write (*,*) "Xi matrix"
+  ! write (*,'(5F8.4)') Xi
+  ! deallocate(Xi)
 
     ! calculate the derivatives of the eigenvectors
     workLocal(:, :nFilled(iS)) = matmul(work3Local, workLocal(:, :nFilled(iS)))

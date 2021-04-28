@@ -95,6 +95,8 @@ module dftbp_mmapi
     procedure :: getGrossCharges => TDftbPlus_getGrossCharges
     !> Return the number of DFTB+ atoms in the system
     procedure :: nrOfAtoms => TDftbPlus_nrOfAtoms
+    !> Return the number of external point charges in the system
+    procedure :: nrOfExtCharges => TDftbPlus_nrOfExtCharges
     !> Check that the list of species names has not changed
     procedure :: checkSpeciesNames => TDftbPlus_checkSpeciesNames
     !> Replace species and redefine all quantities that depend on it
@@ -103,6 +105,8 @@ module dftbp_mmapi
     procedure, private :: checkInit => TDftbPlus_checkInit
     !> Return the masses for each atom in the system
     procedure :: getAtomicMasses => TDftbPlus_getAtomicMasses
+    !> obtain the derivatives of atomic charges w.r.t. coordinates of atoms and ext. point charges
+    procedure :: getChargeDerivatives => TDftbPlus_getChargeDerivatives
   end type TDftbPlus
 
 
@@ -527,6 +531,22 @@ contains
   end function TDftbPlus_nrOfAtoms
 
 
+  !> Returns the nr. of atoms in the system.
+  function TDftbPlus_nrOfExtCharges(this) result(nExtCharge)
+
+    !> Instance
+    class(TDftbPlus), intent(in) :: this
+
+    !> Nr. of atoms
+    integer :: nExtCharge
+
+    call this%checkInit()
+
+    nExtCharge = nrOfExtCharges(this%main)
+
+  end function TDftbPlus_nrOfExtCharges
+
+
   !> Returns the atomic masses for each atom in the system.
   subroutine TDftbPlus_getAtomicMasses(this, mass)
 
@@ -668,5 +688,29 @@ contains
     call updateDataDependentOnSpeciesOrdering(this%env, this%main, inputSpecies)
 
   end subroutine TDftbPlus_setSpeciesAndDependents
+
+
+  !> Derivatives of atomic charges w.r.t. coordinates of atoms,
+  !>   and optionally, w.r.t. coordinates of external point charges
+  !>
+  subroutine TDftbPlus_getChargeDerivatives(this, dQdX, dQdXext)
+
+    !> Instance
+    class(TDftbPlus), intent(inout) :: this
+
+    !> Output: charge derivatives w.r.t. coordinates of atoms
+    real(dp), intent(out) :: dQdX(:,:,:)
+
+    !> Output: charge derivatives w.r.t. coordinates of external point charges
+    real(dp), optional, intent(out) :: dQdXext(:,:,:)
+
+
+    if (present(dQdXext)) then
+      call getChargeDerivatives(this%env, this%main, dQdX, dQdXext)
+    else
+      call getChargeDerivatives(this%env, this%main, dQdX)
+    end if
+
+  end subroutine TDftbPlus_getChargeDerivatives
 
 end module dftbp_mmapi

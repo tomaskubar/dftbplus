@@ -444,6 +444,41 @@ contains
   end subroutine c_DftbPlus_getGrossCharges
 
 
+  !> Obtain the gradients wrt DFTB atom positions
+  subroutine c_DftbPlus_getChargeDerivatives(handler, dQdX, dQdXext)&
+      & bind(C, name='dftbp_get_charge_derivatives')
+
+    !> handler for the calculation
+    type(c_DftbPlus), intent(inout) :: handler
+
+    !> derivatives w.r.t. coords of atoms, row major format
+    type(c_ptr), value, intent(in) :: dQdX
+
+    !> derivatives w.r.t. coords of external point charges, row major format
+    type(c_ptr), value, intent(in) :: dQdXext
+
+    type(TDftbPlusC), pointer :: instance
+    integer :: nAtom, nExtCharge
+    real(c_double), pointer :: ptr_dQdX(:,:,:), ptr_dQdXext(:,:,:)
+
+    call c_f_pointer(handler%instance, instance)
+    nAtom = instance%nrOfAtoms()
+    nExtCharge = instance%nrOfExtCharges()
+
+    call c_f_pointer(dQdX, ptr_dQdX, [nAtom, 3, nAtom])
+    if (nExtCharge > 0) then
+      call c_f_pointer(dQdXext, ptr_dQdXext, [nAtom, 3, nExtCharge])
+    end if
+
+    if (nExtCharge > 0) then
+      call instance%getChargeDerivatives(ptr_dQdX, dQdXext=ptr_dQdXext)
+    else
+      call instance%getChargeDerivatives(ptr_dQdX)
+    end if
+
+  end subroutine c_DftbPlus_getChargeDerivatives
+
+
   !> Converts a 0-char terminated C-type string into a Fortran string.
   function fortranChar(cstring, maxlen)
 

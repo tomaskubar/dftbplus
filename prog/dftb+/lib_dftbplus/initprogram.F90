@@ -1,4 +1,4 @@
-!--------------------------------------------------------------------------------------------------!
+!------------------------------------------------------------------------------------------------g-
 !  DFTB+: general package for performing fast atomistic simulations                                !
 !  Copyright (C) 2006 - 2020  DFTB+ developers group                                               !
 !                                                                                                  !
@@ -1040,6 +1040,12 @@ module dftbp_initprogram
 
     !> atomic charge contribution in excited state
     real(dp), allocatable :: dQAtomEx(:)
+
+    !> derivatives of atomic charges w.r.t. atom coordinates
+    real(dp), allocatable :: dQdX(:,:,:)
+
+    !> derivatives of atomic charges w.r.t. coordinates of MM atoms
+    real(dp), allocatable :: dQdXext(:,:,:)
 
   contains
 

@@ -65,6 +65,7 @@ module dftbp_externalcharges
     procedure :: addForceDcPeriodic
     procedure :: getElStatPotentialCluster
     procedure :: getElStatPotentialPeriodic
+    procedure :: getExtShiftDerivativeCluster
     
     !> Updates the stored coordinates for point charges
     generic, public :: setCoordinates => setCoordsCluster, setCoordsPeriodic
@@ -93,6 +94,9 @@ module dftbp_externalcharges
     !> Copy Q * inverse R contribution for the point charges
     procedure, public :: copyInvRvec
     
+    !> Derivative of shift due to the external charges, with respect to coordinates of an atom
+    generic, public :: getExtShiftDerivative => getExtShiftDerivativeCluster
+
   end type TExtCharge
 
 
@@ -373,6 +377,41 @@ contains
     end if
 
   end subroutine addForceDcCluster
+
+
+  !> Calculate the derivative of shift due to the external charges, with respect to coordinates
+  !> of an atom
+  subroutine getExtShiftDerivativeCluster(this, env, extShiftDerivative, iAtom, atomCoords)
+
+    !> External charges structure
+    class(TExtCharge), intent(in) :: this
+
+    !> Environment settings
+    type(TEnvironment), intent(in) :: env
+
+    !> Derivative (gradient) of shift of every atom w.r.t. coords of iAtom (3, nAtom, nAtom)
+    real(dp), intent(out) :: extShiftDerivative(:,:)
+
+    !> Differentiate with respect to coordinates of this atom
+    integer, intent(in) :: iAtom
+
+    !> Coordinates of the atoms.
+    real(dp), intent(in) :: atomCoords(:,:)
+
+    @:ASSERT(size(extShiftDerivative, dim=1) == 3)
+    @:ASSERT(size(extShiftDerivative, dim=2) == this%nAtom)
+    @:ASSERT(size(atomCoords, dim=1) == 3)
+    @:ASSERT(size(atomCoords, dim=2) == this%nAtom)
+
+    if (this%tBlur) then
+      call calcInvRPrimeAsymm(this%nAtom, atomCoords, this%nChrg, this%coords, this%charges, iAtom,&
+          & extShiftDerivative, tDerivWrtExtCharges=.false., blurWidths=this%blurWidths)
+    else
+      call calcInvRPrimeAsymm(this%nAtom, atomCoords, this%nChrg, this%coords, this%charges, iAtom,&
+          & extShiftDerivative, tDerivWrtExtCharges=.false.)
+    end if
+
+  end subroutine getExtShiftDerivativeCluster
 
 
   !> Adds that part of force contribution due to the external charges, which is not contained in the

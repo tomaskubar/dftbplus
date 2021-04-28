@@ -18,7 +18,7 @@ module dftbp_mainapi
 #:if WITH_SCALAPACK
   use dftbp_initprogram, only : getDenseDescBlacs
 #:endif
-  use dftbp_main, only : processGeometry
+  use dftbp_main, only : processGeometry, processChargeDerivatives
   use dftbp_message, only : error
   use dftbp_orbitals, only : TOrbitals
   use dftbp_qdepextpotproxy, only : TQDepExtPotProxy
@@ -32,8 +32,8 @@ module dftbp_mainapi
 
   public :: setGeometry, setQDepExtPotProxy, setExternalPotential, setExternalCharges
   public :: getEnergy, getGradients, getExtChargeGradients, getGrossCharges, getStressTensor
-  public :: nrOfAtoms, getAtomicMasses
-  public :: updateDataDependentOnSpeciesOrdering, checkSpeciesNames
+  public :: nrOfAtoms, nrOfExtCharges, getAtomicMasses
+  public :: updateDataDependentOnSpeciesOrdering, checkSpeciesNames, getChargeDerivatives
 
 
 contains
@@ -300,6 +300,19 @@ contains
   end function nrOfAtoms
 
 
+  !> Obtains number of external point charges in the system
+  function nrOfExtCharges(main)
+
+    !> Instance
+    type(TDftbPlusMain), intent(in) :: main
+
+    integer :: nrOfExtCharges
+
+    nrOfExtCharges = main%nExtChrg
+
+  end function nrOfExtCharges
+
+
   !> Check that the order of speciesName remains constant Keeping speciesNames constant avoids the
   !> need to reset all of atomEigVal, referenceN0, speciesMass and SK parameters
   !>
@@ -413,6 +426,51 @@ contains
     outMass = main%mass
 
   end subroutine getAtomicMasses
+
+
+  !> Get the derivatives of Mulliken charges for atoms
+  !>   w.r.t. coordinates of atoms and of external point charges
+  subroutine getChargeDerivatives(env, main, dQdX, dQdXext)
+
+    !> instance
+    type(TEnvironment), intent(inout) :: env
+
+    !> Instance
+    type(TDftbPlusMain), intent(inout) :: main
+
+    !> Output: charge derivatives w.r.t. coordinates of atoms
+    real(dp), intent(out) :: dQdX(:,:,:)
+
+    !> Output: charge derivatives w.r.t. coordinates of external point charges
+    real(dp), optional, intent(out) :: dQdXext(:,:,:)
+
+    @:ASSERT(size(dQdX, dim=1) == main%nAtom)
+    @:ASSERT(size(dQdX, dim=2) == 3)
+    @:ASSERT(size(dQdX, dim=3) == main%nAtom)
+    if (main%nExtChrg > 0) then
+      @:ASSERT(size(dQdXext, dim=1) == main%nAtom)
+      @:ASSERT(size(dQdXext, dim=2) == 3)
+      @:ASSERT(size(dQdXext, dim=3) == main%nExtChrg)
+    end if
+
+    ! run the calculation
+    call processChargeDerivatives(env, main)
+
+  ! if (allocated(dQdX)) then
+  !   deallocate(dQdX)
+  ! end if
+  ! allocate(dQdX(main%nAtom, 3, main%nAtom))
+    dQdX(:,:,:) = - main%dQdX(:,:,:)
+
+    if (present(dQdXext) .and. main%nExtChrg > 0) then
+    ! if (allocated(dQdXext)) then
+    !   deallocate(dQdXext)
+    ! end if
+    ! allocate(dQdXext(main%nAtom, 3, main%nExtChrg))
+      dQdXext(:,:,:) = - main%dQdXext(:,:,:)
+    end if
+
+  end subroutine getChargeDerivatives
 
 
 

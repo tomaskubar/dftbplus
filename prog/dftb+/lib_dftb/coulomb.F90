@@ -34,7 +34,7 @@ module dftbp_coulomb
   public :: invRCluster, invRPeriodic, sumInvR, addInvRPrime, getOptimalAlphaEwald, getMaxGEwald
   public :: getMaxREwald, invRStress
   public :: addInvRPrimeXlbomd
-  public :: calcInvRPrime
+  public :: calcInvRPrime, calcInvRPrimeAsymm
   public :: ewaldReal, ewaldReciprocal, derivEwaldReal, derivEwaldReciprocal, derivStressEwaldRec
 
 
@@ -205,6 +205,12 @@ module dftbp_coulomb
   interface calcInvRPrime
     module procedure calcInvRPrimeCluster
   end interface calcInvRPrime
+
+
+  !> 1/r^2 potential, derivatives for interaction between atoms and ext. charges
+  interface calcInvRPrimeAsymm
+    module procedure calcInvRPrimeAsymmCluster
+  end interface calcInvRPrimeAsymm
 
 
   !> Maximal argument value of erf, after which it is constant
@@ -2567,6 +2573,92 @@ contains
     end do
 
   end subroutine calcInvRPrimeCluster
+
+
+  !> Calculates the -1/R**2 deriv contribution for potentials for the non-periodic case
+  subroutine calcInvRPrimeAsymmCluster(nAtom, coord, nExtCharge, coordExtCharge, extCharge,&
+      & iParticle, deriv, tDerivWrtExtCharges, blurWidths)
+
+    !> Number of atoms
+    integer, intent(in) :: nAtom
+
+    !> List of atomic coordinates (3, nAtom)
+    real(dp), intent(in) :: coord(:,:)
+
+    !> Number of external charges
+    integer, intent(in) :: nExtCharge
+
+    !> Coordinates of external charges (3, nExtCharge)
+    real(dp), intent(in) :: coordExtCharge(:,:)
+
+    !> Magnitudes of external charges (nExtCharge)
+    real(dp), intent(in) :: extCharge(:)
+
+    !> Atom or external charge to differentiate wrt to
+    integer, intent(in) :: iParticle
+
+    !> Contains the derivative of shift (3, nAtom)
+    real(dp), intent(out) :: deriv(:,:)
+
+    !> FALSE = derivatives w.r.t. coordinates of atom #iParticle
+    !> TRUE = derivatives w.r.t. coordinates of external charge #iParticle
+    logical, intent(in) :: tDerivWrtExtCharges
+
+    !> smearing of external charges
+    real(dp), intent(in), optional :: blurWidths(:)
+
+    integer :: iExtCharge, iAtom
+    real(dp) :: dist3, vect(3) !, fTmp
+
+    @:ASSERT(size(coord, dim=1) == 3)
+    @:ASSERT(size(coord, dim=2) == nAtom)
+    @:ASSERT(size(coordExtCharge, dim=1) == 3)
+    @:ASSERT(size(coordExtCharge, dim=2) == nExtCharge)
+    @:ASSERT(size(extCharge) == nExtCharge)
+    @:ASSERT(size(deriv, dim=1) == 3)
+    @:ASSERT(size(deriv, dim=2) == nAtom)
+
+    deriv = 0._dp
+
+    if (present(blurWidths)) then
+      write (*,*) "BLUR WIDTHS NOT YET IMPLEMENTED"
+      stop
+    end if
+
+    if (.not. tDerivWrtExtCharges) then
+
+    ! do iAtom = 1, nAtom
+        do iExtCharge = 1, nExtCharge
+
+          vect(:) = coordExtCharge(:,iExtCharge) - coord(:,iParticle)
+          dist3 = sqrt(sum(vect(:)**2)) ** 3
+
+          deriv(:,iParticle) = deriv(:,iParticle) + vect(:) / dist3 * extCharge(iExtCharge)
+        ! deriv(:,iParticle,iAtom) = deriv(:,iParticle,iAtom) + 0.5_dp * vect(:) / dist3
+        ! deriv(:,iAtom,iParticle) = deriv(:,iAtom,iParticle) + 0.5_dp * vect(:) / dist3
+        !
+        ! fTmp = -vect(iCart) / (dist**3)
+        !
+        ! vprime(iAt) = vprime(iAt) + deltaQAtom(jj)*fTmp
+        ! vprime(jj) = vprime(jj) + deltaQAtom(iAt)*fTmp
+
+        end do
+    ! end do
+
+    else
+
+      do iAtom = 1, nAtom
+      ! do iExtCharge = 1, nExtCharge
+          vect(:) = coord(:,iAtom) - coordExtCharge(:,iParticle)
+          dist3 = sqrt(sum(vect(:)**2)) ** 3
+          deriv(:,iAtom) = extCharge(iParticle) / dist3 * vect(:) ! sign looks OK
+      ! end do
+      end do
+
+    end if
+
+  end subroutine calcInvRPrimeAsymmCluster
+
 
   !> Calculates the -1/R**2 deriv contribution for all atoms for the non-periodic case, without
   !> storing anything.

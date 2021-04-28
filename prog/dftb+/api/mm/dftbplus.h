@@ -272,6 +272,21 @@ void dftbp_get_stress_tensor(DftbPlus *instance, double *stresstensor);
  */
 void dftbp_get_gross_charges(DftbPlus *instance, double *charges);
 
+
+/**
+ * Runs a calculation of derivatives of atomic gross charges with respect to coordinates of atoms.
+ *   With QM/MM, also derivatives w.r.t. coordinates of external point charges are calculated.
+ *
+ * \param[inout] instance Handler of the DFTB+ instance.
+ *
+ * \param[out] dQdX Derivatives w.r.t. atom coordinates.  Shape [natom, 3, natom].
+ *
+ * \param[out] dQdXext Derivatives w.r.t. external point charges.  Shape [natom, 3, nextcharge].
+ *
+ * Sign convention: Electron has negative charge.
+ */
+void dftbp_get_charge_derivatives(DftbPlus *instance, double *dQdX, double *dQdXext);
+
 #ifdef __cplusplus
 }
 #endif

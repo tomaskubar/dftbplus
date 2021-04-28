@@ -76,6 +76,7 @@ module dftbp_thirdorder
     procedure :: getEnergyPerAtom
     procedure :: getEnergyPerAtomXlbomd
     procedure :: addGradientDc
+    procedure :: getGamma3
     procedure :: getGamma3Deriv
     procedure :: addGradientDcXlbomd
     procedure :: addStressDc
@@ -272,10 +273,10 @@ contains
       end do
     end do
 
-    write (*,*) "dGamma3ab -- NEW"
-    write (*,'(6F12.7)') this%gamma3abDeriv
-    write (*,*) "dGamma3ba -- NEW"
-    write (*,'(6F12.7)') this%gamma3baDeriv
+  ! write (*,*) "dGamma3ab -- NEW"
+  ! write (*,'(6F12.7)') this%gamma3abDeriv
+  ! write (*,*) "dGamma3ba -- NEW"
+  ! write (*,'(6F12.7)') this%gamma3baDeriv
 
   end subroutine updateCoordsCP_backup
 
@@ -339,10 +340,10 @@ contains
       end do
     end do
 
-    write (*,*) "dGamma3ab -- NEW"
-    write (*,'(6F12.7)') this%gamma3abDeriv
-    write (*,*) "dGamma3ba -- NEW"
-    write (*,'(6F12.7)') this%gamma3baDeriv
+  ! write (*,*) "dGamma3ab -- NEW"
+  ! write (*,'(6F12.7)') this%gamma3abDeriv
+  ! write (*,*) "dGamma3ba -- NEW"
+  ! write (*,'(6F12.7)') this%gamma3baDeriv
 
   end subroutine updateCoordsCP
 
@@ -568,16 +569,16 @@ contains
     this%shift1Deriv(:,:) = 1.0_dp / 3.0_dp * this%shift1Deriv
     this%shift2Deriv(:,:) = 1.0_dp / 3.0_dp * this%shift2Deriv
     this%shift3Deriv(:) = 1.0_dp / 3.0_dp * this%shift3Deriv
-    write (*,*) "chargesPerAtom"
-    write (*,'(10F12.6)') this%chargesPerAtom
-    write (*,*) "chargesPerShell"
-    write (*,'(10F12.6)') this%chargesPerShell
-    write (*,*) "shift1Deriv"
-    write (*,'(6F12.6)') this%shift1Deriv
-    write (*,*) "shift2Deriv"
-    write (*,'(6F12.6)') this%shift2Deriv
-    write (*,*) "shift3Deriv"
-    write (*,'(3F12.6)') this%shift3Deriv
+  ! write (*,*) "chargesPerAtom"
+  ! write (*,'(10F12.6)') this%chargesPerAtom
+  ! write (*,*) "chargesPerShell"
+  ! write (*,'(10F12.6)') this%chargesPerShell
+  ! write (*,*) "shift1Deriv"
+  ! write (*,'(6F12.6)') this%shift1Deriv
+  ! write (*,*) "shift2Deriv"
+  ! write (*,'(6F12.6)') this%shift2Deriv
+  ! write (*,*) "shift3Deriv"
+  ! write (*,'(3F12.6)') this%shift3Deriv
 
   end subroutine updateChargesCP
 
@@ -850,6 +851,56 @@ contains
     end do
 
   end subroutine addGradientDc
+
+
+  !> For CP-DFTB: obtain the Gamma matrix.
+  !> The asymmetric matrix will be output as two separate symmetric matrices
+  subroutine getGamma3(this, species, coords, gamma3ab, gamma3ba)
+
+    !> Instance.
+    class(TThirdOrder), intent(inout) :: this
+
+    !> Species for all atoms, shape: [nAllAtom].
+    integer, intent(in) :: species(:)
+
+    !> Coordinate of each atom, shape: [3, nAllAtom]
+    real(dp), intent(in) :: coords(:,:)
+
+    !> d gamma_AB / d Q_A, shape: [nAllAtom, nAllAtom]
+    real(dp), intent(out) :: gamma3ab(:,:)
+
+    !> d gamma_AB / d Q_B, shape: [nAllAtom, nAllAtom]
+    real(dp), intent(out) :: gamma3ba(:,:)
+
+    integer :: iAt1, iAt2, iSp1, iSp2
+    logical :: damping
+    real(dp) :: rab(3), dist
+
+    @:ASSERT(size(coords, dim=1) == 3)
+    @:ASSERT(size(coords, dim=2) == this%nAtoms)
+    @:ASSERT(size(gamma3ab, dim=2) == this%nAtoms)
+    @:ASSERT(size(gamma3ab, dim=2) == this%nAtoms)
+    @:ASSERT(size(gamma3ba, dim=1) == this%nAtoms)
+    @:ASSERT(size(gamma3ba, dim=2) == this%nAtoms)
+
+    gamma3ab(:,:) = 0.0_dp
+    gamma3ba(:,:) = 0.0_dp
+
+    do iAt1 = 1, this%nAtoms
+      iSp1 = species(iAt1)
+      do iAt2 = 1, this%nAtoms
+        iSp2 = species(iAt2)
+        rab = coords(:, iAt1) - coords(:, iAt2)
+        dist = sqrt(sum(rab(:)**2))
+        damping = this%damped(iSp1) .or. this%damped(iSp2)
+        gamma3ab(iAt1, iAt2) = gamma3(this%UU(1, iSp1), this%UU(1, iSp2), this%dUdQ(1, iSp1),&
+            & dist, damping, this%dampExp)
+        gamma3ba(iAt1, iAt2) = gamma3(this%UU(1, iSp2), this%UU(1, iSp1), this%dUdQ(1, iSp2),&
+            & dist, damping, this%dampExp)
+      end do
+    end do
+
+  end subroutine getGamma3
 
 
   !> Return the derivatives of matrices Gamma3ab and Gamma3ba

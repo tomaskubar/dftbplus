@@ -246,6 +246,9 @@ module dftbp_scc
     !> Returns the shift per atom coming from the SCC part
     procedure :: getShiftPerAtom
 
+    !> Returns the shift per atom coming from the SCC part -- version for coupled-perturbed eqns
+    procedure :: getShiftPerAtomCP
+
     !> Returns the shift per L contribution of the SCC.
     procedure :: getShiftPerL
 
@@ -272,6 +275,9 @@ module dftbp_scc
 
     !> Get Q * inverse R contribution for the point charges
     procedure :: getShiftOfPC
+
+    !> Calculate derivative of shift due to the extcharges, w.r.t. coords of an atom or an extcharge
+    procedure :: getExtShiftDerivative
 
   end type TScc
 
@@ -1012,6 +1018,34 @@ contains
   end subroutine getShiftPerAtom
 
 
+  !> Returns the shift per atom coming from the SCC part
+  !> Version for coupled-perturbed equations;
+  !>   no contribution from ext. charges
+  subroutine getShiftPerAtomCP(this, shift)
+
+    !> Instance
+    class(TScc), intent(in) :: this
+
+    !> Contains the shift on exit.
+    real(dp), intent(out) :: shift(:)
+
+    @:ASSERT(this%tInitialised)
+    @:ASSERT(size(shift) == size(this%shiftPerAtom))
+
+    shift(:) = this%shiftPerAtom
+    if (.not. this%hasExternalShifts) then
+      call this%coulombCont%addShiftPerAtom(shift)
+    end if
+    if (this%tChrgConstr) then
+      call addShiftPerAtom(this%chrgConstr, shift)
+    end if
+    if (this%tThirdOrder) then
+      call addShiftPerAtom(this%thirdOrder, shift)
+    end if
+
+  end subroutine getShiftPerAtomCP
+
+
   !> Returns the shift per L contribution of the SCC.
   subroutine getShiftPerL(this, shift)
 
@@ -1240,6 +1274,32 @@ contains
     end if
 
   end subroutine getExternalElStatPotential
+
+
+  !> Calculate the derivative of shift due to the external charges, with respect to coordinates
+  !> of an atom
+  subroutine getExtShiftDerivative(this, env, extShiftDerivative, iAtom, atomCoords)
+
+    !> Instance
+    class(TScc), intent(in) :: this
+
+    !> Environment settings
+    type(TEnvironment), intent(in) :: env
+
+    !> Derivative (gradient) of shift of every atom w.r.t. coords of iAtom (3, nAtom, nAtom)
+    real(dp), intent(out) :: extShiftDerivative(:,:)
+
+    !> Differentiate with respect to coordinates of this atom
+    integer, intent(in) :: iAtom
+
+    !> Coordinates of the atoms.
+    real(dp), intent(in) :: atomCoords(:,:)
+
+    if (allocated(this%extCharge)) then
+      call this%extCharge%getExtShiftDerivative(env, extShiftDerivative, iAtom, atomCoords)
+    end if
+
+  end subroutine getExtShiftDerivative
 
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

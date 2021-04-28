@@ -14,6 +14,7 @@ module dftbp_perturbxderivs_qmmm
   use dftbp_blockpothelper, only : appendBlockReduced
   use dftbp_commontypes
   use dftbp_constants
+  use dftbp_coulomb
   use dftbp_densedescr
   use dftbp_dftbplusu
   use dftbp_environment
@@ -47,8 +48,8 @@ module dftbp_perturbxderivs_qmmm
   private
   public :: dPsidxQMMM
 
-  !> Direction labels
-  character(len=1), parameter :: direction(3) = ['x','y','z']
+! !> Direction labels
+! character(len=1), parameter :: direction(3) = ['x','y','z']
 
 contains
 
@@ -58,7 +59,7 @@ contains
       & sccCalc, maxSccIter, sccTol, nMixElements, nIneqMixElements, iEqOrbitals, tempElec, Ef,&
       & tFixEf, spinW, thirdOrd, dftbU, iEqBlockDftbu, onsMEs, iEqBlockOnSite, rangeSep,&
       & nNeighbourLC, pChrgMixer, taggedWriter, tWriteAutoTest, autoTestTagFile, tWriteTaggedOut,&
-      & taggedResultsFile, tWriteDetailedOut, fdDetailedOut, tMulliken)
+      & taggedResultsFile, tWriteDetailedOut, fdDetailedOut, tMulliken, dQdXext)
       
     !> Environment settings
     type(TEnvironment), intent(inout) :: env
@@ -194,7 +195,10 @@ contains
     !> Should Mulliken populations be generated/output
     logical, intent(in) :: tMulliken
 
-    integer :: iS, iK, iKS, iAt, iCart, iLev, iSh, iSp, jAt, jCart
+    !> Output, charge derivatives
+    real(dp), allocatable, intent(out) :: dQdXext(:,:,:)
+
+    integer :: iS, iK, iKS, iExtchg, iCart, iLev, iSh, iSp, jAt ! iAt, jCart 
 
     integer :: nSpin, nKpts, nOrbs, nIndepHam
 
@@ -215,7 +219,7 @@ contains
 
     real(dp) :: dRho(size(over),size(ham, dim=2))
     real(dp) :: dqIn(orb%mOrb,nAtom,size(ham, dim=2))
-    real(dp) :: dqOut(orb%mOrb, nAtom, size(ham, dim=2), 3, nAtom)
+    real(dp), allocatable :: dqOut(:,:,:,:,:) !(orb%mOrb, nAtom, size(ham, dim=2), 3, nExtCharge)
     real(dp) :: dqInpRed(nMixElements), dqOutRed(nMixElements)
     real(dp) :: dqDiffRed(nMixElements), sccErrorQ
     real(dp) :: dqPerShell(orb%mShell,nAtom,size(ham, dim=2))
@@ -244,12 +248,12 @@ contains
     real(dp), pointer :: dRhoOutSqr(:,:,:), dRhoInSqr(:,:,:)
     real(dp), allocatable, target :: dRhoOut(:), dRhoIn(:)
 
-    real(dp) :: dDipole(3)
+  ! real(dp) :: dDipole(3)
 
     ! QM/MM specific
     ! coordinates and charges of MM atoms
     integer :: nExtCharge
-    real(dp), allocatable :: extCoord(:,:), extCharge(:), dgammaQMMM(:,:,:)
+    real(dp), allocatable :: extCoord(:,:), extCharge(:), dgammaQMMM(:,:) !,:)
 
     ! obtain the coordinates and charges of MM atoms from SCC structures
     call sccCalc%getExternalCharges(nExtCharge, extCoord, extCharge)
@@ -257,6 +261,13 @@ contains
       write (*,*) "No MM atoms, nothing to do in dPsidxQMMM."
       return
     end if
+  ! write (*,*) "EXTERNAL CHARGES: NUMBER = ", nExtCharge
+  ! do iExtchg=1, nExtcharge
+  !   write (*,'(4F10.5)') extCoord(:,iExtchg) / AA__Bohr, extCharge(iExtchg)
+  ! end do
+
+    ! allocate the array/s that need to know the number of ext. charges
+    allocate(dqOut(orb%mOrb, nAtom, size(ham, dim=2), 3, nExtCharge))
 
     if (tFixEf) then
       call error("Perturbation expressions not currently implemented for fixed Fermi energy")
@@ -281,7 +292,7 @@ contains
     nOrbs = size(filling,dim=1)
     nKpts = size(filling,dim=2)
 
-    allocate(dEi(nOrbs, nAtom, nSpin, 3))
+    allocate(dEi(nOrbs, nExtCharge, nSpin, 3))
 
     allocate(dHam(size(ham,dim=1),nSpin))
 
@@ -366,19 +377,22 @@ contains
     dEi(:,:,:,:) = 0.0_dp
 
     ! derivatives of QM--MM 1/r w.r.t. coordinates of MM atoms
-    allocate(dgammaQMMM(3, nAtom, nExtCharge))
-    call calcInvRPrimeQMMM(nAtom, nExtCharge, coord, extCoord, extCharge, dgammaQMMM)
+    allocate(dgammaQMMM(3, nAtom)) !, nExtCharge))
+  ! call calcInvRPrimeQMMM(nAtom, nExtCharge, coord, extCoord, extCharge, dgammaQMMM)
 
     ! Displaced MM atom to differentiate wrt
-    lpAtom: do iAt = 1, nExtCharge
+    lpAtom: do iExtchg = 1, nExtCharge
 
       ! any non-variational QM/MM contribution?
+
+      call calcInvRPrimeAsymm(nAtom, coord, nExtCharge, extCoord, extCharge, iExtchg,&
+          & dgammaQMMM, tDerivWrtExtCharges=.true.)
 
       ! perturbation direction
       lpCart: do iCart = 1, 3
 
-        write (stdOut,*) 'Calculating derivative for displacement along ',&
-            & trim(direction(iCart)),' for MM charge number', iAt
+      ! write (stdOut,*) 'Calculating derivative for displacement along ',&
+      !     & trim(direction(iCart)),' for MM charge number', iExtchg
 
         if (tSccCalc) then
           sOmega(:,:) = 0.0_dp
@@ -391,7 +405,7 @@ contains
 
           call sccCalc%updateCoords(env, coord, species, neighbourList)
           call sccCalc%updateCharges(env, qOrb, q0, orb, species)
-          vAt(:,1) = dgammaQMMM(iCart,:,iAt)
+          vAt(:,1) = dgammaQMMM(iCart,:) !,iExtchg)
           call total_shift(vdgamma, vAt, orb, species)
 
         end if
@@ -412,9 +426,9 @@ contains
           end if
         end if
 
-        if (tSccCalc) then
-          write (stdOut, "(1X,A,T12,A)") 'SCC Iter' , 'Error'
-        end if
+      ! if (tSccCalc) then
+      !   write (stdOut, "(1X,A,T12,A)") 'SCC Iter' , 'Error'
+      ! end if
 
         iSCCIter = 1
         tStopSCC = .false.
@@ -431,7 +445,9 @@ contains
           if (tSccCalc .and. iSCCiter>1) then
             call sccCalc%updateCharges(env, dqIn, orb=orb, species=species)
             call sccCalc%updateShifts(env, orb, species, neighbourList%iNeighbour, img2CentCell)
-            call sccCalc%getShiftPerAtom(dPotential%intAtom(:,1))
+            ! Tomas Kubar -- need a special version of getShiftPerAtomCP
+            !   to avoid a weird, spurious contribution from ext. charges being added
+            call sccCalc%getShiftPerAtomCP(dPotential%intAtom(:,1))
             call sccCalc%getShiftPerL(dPotential%intShell(:,:,1))
 
             if (allocated(spinW)) then
@@ -504,7 +520,7 @@ contains
                 & img2CentCell, denseDesc, iKS, parallelKS, nFilled(:,1), nEmpty(:,1),&
                 & eigVecsReal, eigVals, Ef, tempElec, orb, dRho(:,iS), iCart, dRhoOutSqr,&
                 & rangeSep, over, nNeighbourLC, tMetallic, filling / maxFill, dEi,&
-                & dPsiReal, iAt)
+                & dPsiReal, iExtchg)
           end do
 
           dRho(:,:) = maxFill * dRho
@@ -513,9 +529,9 @@ contains
           end if
           call ud2qm(dRho)
 
-          dqOut(:, :, :, iCart, iAt) = 0.0_dp
+          dqOut(:, :, :, iCart, iExtchg) = 0.0_dp
           do iS = 1, nSpin
-            call mulliken(dqOut(:, :, iS, iCart, iAt), over, dRho(:,iS), orb,&
+            call mulliken(dqOut(:, :, iS, iCart, iExtchg), over, dRho(:,iS), orb,&
                 & neighbourList%iNeighbour, nNeighbourSK, img2CentCell, iSparseStart)
             if (allocated(dftbU) .or. allocated(onsMEs)) then
               dqBlockOut(:,:,:,iS) = 0.0_dp
@@ -530,7 +546,7 @@ contains
               dqDiffRed(:) = dRhoOut - dRhoIn
             else
               dqOutRed = 0.0_dp
-              call OrbitalEquiv_reduce(dqOut(:, :, :, iCart, iAt), iEqOrbitals, orb,&
+              call OrbitalEquiv_reduce(dqOut(:, :, :, iCart, iExtchg), iEqOrbitals, orb,&
                   & dqOutRed(:nIneqMixElements))
               if (allocated(dftbU)) then
                 call appendBlockReduced(dqBlockOut, iEqBlockDFTBU, orb, dqOutRed)
@@ -542,7 +558,7 @@ contains
             end if
             sccErrorQ = maxval(abs(dqDiffRed))
 
-            write(stdOut,"(1X,I0,T10,E20.12)")iSCCIter, sccErrorQ
+          ! write(stdOut,"(1X,I0,T10,E20.12)")iSCCIter, sccErrorQ
             tConverged = (sccErrorQ < sccTol)
 
             if ((.not. tConverged) .and. iSCCiter /= maxSccIter) then
@@ -551,7 +567,7 @@ contains
                   dRhoIn(:) = dRhoOut
                   call denseMulliken(dRhoInSqr, SSqrReal, denseDesc%iAtomStart, dqIn)
                 else
-                  dqIn(:,:,:) = dqOut(:, :, :, iCart, iAt)
+                  dqIn(:,:,:) = dqOut(:, :, :, iCart, iExtchg)
                   dqInpRed(:) = dqOutRed(:)
                   if (allocated(dftbU) .or. allocated(onsMEs)) then
                     dqBlockIn(:,:,:,:) = dqBlockOut(:,:,:,:)
@@ -627,44 +643,58 @@ contains
 
     end do lpAtom
 
-    write (stdOut, *) 'dEi'
-    do iCart = 1, 3
-      write (stdOut, *) iCart
-      do iS = 1, nSpin
-        do iAt = 1, nAtom
-          write (stdOut, *) dEi(:, iAt, iS, iCart) ! * Hartree__eV
-        end do
-      end do
-    end do
+  ! write (stdOut, *) 'dEi'
+  ! do iCart = 1, 3
+  !   write (stdOut, *) iCart
+  !   do iS = 1, nSpin
+  !     do iExtchg = 1, nExtCharge
+  !       write (stdOut, *) dEi(:, iExtchg, iS, iCart) ! * Hartree__eV
+  !     end do
+  !   end do
+  ! end do
 
     if (tMulliken .or. tSccCalc) then
       write (stdOut, *)
       write (stdOut, *) 'Charge derivatives'
-      do iAt = 1, nExtCharge
-        write (stdOut,"(A,I0)") '/d MMcharge_', iAt
+      do iExtchg = 1, nExtCharge
+        write (stdOut,"(A,I0)") '/d MMcharge_', iExtchg
         do iS = 1, nSpin
           do jAt = 1, nAtom
-            write (stdOut, '(I3,3F11.6)') jAt, -sum(dqOut(:, jAt, iS, :, iAt), dim=1)
+            write (stdOut, '(I3,3F11.6)') jAt, -sum(dqOut(:, jAt, iS, :, iExtchg), dim=1)
           end do
           write (stdOut, *)
         end do
       end do
       write (stdOut, *)
 
-      write (stdOut, *) 'Born effective charges'
-      ! i.e. derivative of dipole moment wrt to atom positions, or equivalently derivative of forces
-      ! wrt to a homogeneous electric field
-      do iAt = 1, nAtom
+      ! save output -- spin channel 1
+      if (allocated(dQdXext)) then
+        deallocate(dQdXext)
+      end if
+      allocate(dQdXext(nAtom, 3, nExtCharge))
+      do iExtChg = 1, nExtCharge
         do iCart = 1, 3
-          do jCart = 1, 3
-            dDipole(jCart) = -sum(sum(dqOut(:, : , 1, iCart, iAt), dim=1) * coord(jCart, :))
-          end do
-          dDipole(iCart) = dDipole(iCart) -sum(qOrb(:,iAt,1) - q0(:,iAt,1))
-          write (stdOut,*) dDipole
+          dQdXext(:, iCart, iExtChg) = sum(dqOut(:, :, 1, iCart, iExtChg), dim=1)
         end do
-        write (stdOut, *)
       end do
-      write (stdOut, *)
+
+    ! write (stdOut, *) 'Born effective charges'
+    ! ! i.e. derivative of dipole moment wrt to atom positions, or equivalently derivative of forces
+    ! ! wrt to a homogeneous electric field
+    ! Tomas Kubar - UNCLEAR: should iAt be external charge with respect to which it is being derived?
+    !             - then, what should the indiced to qOrb and q0 be,
+    !             -       or should these arrays be used at all?
+    ! do iAt = 1, nAtom
+    !   do iCart = 1, 3
+    !     do jCart = 1, 3
+    !       dDipole(jCart) = -sum(sum(dqOut(:, : , 1, iCart, iAt), dim=1) * coord(jCart, :))
+    !     end do
+    !     dDipole(iCart) = dDipole(iCart) -sum(qOrb(:,iAt,1) - q0(:,iAt,1))
+    !     write (stdOut,*) dDipole
+    !   end do
+    !   write (stdOut, *)
+    ! end do
+    ! write (stdOut, *)
 
     end if
 
@@ -686,8 +716,8 @@ contains
   !> q=0, k=0
   subroutine dRhoRealQMMM(env, dHam, neighbourList, nNeighbourSK, iSparseStart, img2CentCell,&
       & denseDesc, iKS, parallelKS, nFilled, nEmpty, eigVecsReal, eigVals, Ef, tempElec, orb,&
-      & dRhoSparse, iCart, dRhoSqr, rangeSep, over, nNeighbourLC, tMetallic, filling,&
-      & dEi, dPsi, iAtom)
+      & dRhoSparse, iCart, dRhoSqr, rangeSep, over, nNeighbourLC, tMetallic, filling, dEi, dPsi,&
+      & iExtchg)
 
     !> Environment settings
     type(TEnvironment), intent(inout) :: env
@@ -768,8 +798,8 @@ contains
     !> Optional derivatives of single particle wavefunctions
     real(dp), allocatable, intent(inout) :: dPsi(:,:,:,:)
 
-    !> Atom with which the the derivative is being calculated
-    integer, intent(in) :: iAtom
+    !> Ext. charge with which the the derivative is being calculated
+    integer, intent(in) :: iExtchg
 
     integer :: ii, iFilled, iEmpty, iS, iK, nOrb
     real(dp) :: workLocal(size(eigVecsReal,dim=1), size(eigVecsReal,dim=2))
@@ -788,7 +818,7 @@ contains
 
     call transform%init()
 
-    dEi(:, iAtom, iS, iCart) = 0.0_dp
+    dEi(:, iExtchg, iS, iCart) = 0.0_dp
     if (allocated(dPsi)) then
       dPsi(:, :, iS, iCart) = 0.0_dp
     end if
@@ -824,12 +854,12 @@ contains
 
     ! diagonal elements of workLocal are now derivatives of eigenvalues
     do ii = 1, nOrb
-      dEi(ii, iAtom, iS, iCart) = workLocal(ii, ii)
+      dEi(ii, iExtchg, iS, iCart) = workLocal(ii, ii)
     end do
 
     if (tMetallic(iS)) then
-      call dEida(dFilling, filling(:,iK,iS), dEi(:,iAtom, iS, iCart), tempElec)
-      !write(stdOut,*)'dEf', dEfda(filling(:,iK,iS), dEi(:,iAtom, iS, iCart))
+      call dEida(dFilling, filling(:,iK,iS), dEi(:,iExtchg, iS, iCart), tempElec)
+      !write(stdOut,*)'dEf', dEfda(filling(:,iK,iS), dEi(:,iExtchg, iS, iCart))
       !write(stdOut,*)dFilling
     end if
 
@@ -889,47 +919,6 @@ contains
     call transform%destroy()
 
   end subroutine dRhoRealQMMM
-
-
-  !> Calculates the -1/R**2 derivative of QM--MM distances w.r.t. coords of MM atoms 
-  !>   directly multiplied by the MM charges (as that is included in the derivative of the shift)
-  !> adopted from subroutine addInvRPrimeClusterAsymm in coulomb.F90
-  subroutine calcInvRPrimeQMMM(nAtom0, nAtom1, coord0, coord1, charge1, deriv)
-
-    !> Number of atoms in the first group -- QM atoms
-    integer, intent(in) :: nAtom0
-
-    !> Number of atoms in the second group -- MM atoms
-    integer, intent(in) :: nAtom1
-
-    !> List of atomic coordinates.
-    real(dp), intent(in) :: coord0(:,:)
-
-    !> List of the point charge coordinates
-    real(dp), intent(in) :: coord1(:,:)
-
-    !> Charge of the point charges.
-    real(dp), intent(in) :: charge1(:)
-
-    !> Derivative, deriv(3, #QM, #MM)
-    real(dp), intent(out) :: deriv(:,:,:)
-
-    integer :: iAt0, iAt1
-    real(dp) :: dist, vect(3)
-
-    @:ASSERT(size(deriv, dim=1) == 3)
-    @:ASSERT(size(deriv, dim=2) == nAtom0)
-    @:ASSERT(size(deriv, dim=3) == nAtom1)
-
-    do iAt0 = 1, nAtom0
-      do iAt1 = 1, nAtom1
-        vect(:) = coord0(:,iAt0) - coord1(:,iAt1)
-        dist = sqrt(sum(vect(:)**2))
-        deriv(:,iAt0,iAt1) = charge1(iAt1) / (dist**3) * vect(:) ! sign looks OK
-      end do
-    end do
-
-  end subroutine calcInvRPrimeQMMM
 
 
 end module dftbp_perturbxderivs_qmmm
