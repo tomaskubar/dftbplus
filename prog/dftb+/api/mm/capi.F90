@@ -356,6 +356,33 @@ contains
   end subroutine c_DftbPlus_setCoordsLatticeVecsOrigin
 
 
+  !> set external point charges
+  subroutine c_DftbPlus_setExternalCharges(handler, nExtCharges, chargeCoords, chargeQs)&
+      & bind(C, name='dftbp_set_external_charges')
+
+    !> handler for the calculation
+    type(c_DftbPlus), intent(inout) :: handler
+
+    !> number of external point charges
+    integer(c_int), intent(in) :: nExtCharges
+
+    !> coordinates of point charges
+    type(c_ptr), value, intent(in) :: chargeCoords
+
+    !> magnitudes of point charges
+    real(c_double), intent(in) :: chargeQs(*)
+
+    type(TDftbPlusC), pointer :: instance
+    real(c_double), pointer :: ptr_chargeCoords(:,:)
+
+    call c_f_pointer(handler%instance, instance)
+    call c_f_pointer(chargeCoords, ptr_chargeCoords, [3, nExtCharges])
+
+    call instance%setExternalCharges(ptr_chargeCoords, chargeQs(1:nExtCharges))
+
+  end subroutine c_DftbPlus_setExternalCharges
+
+
   !> Obtain nr. of atoms.
   function c_DftbPlus_nrOfAtoms(handler) result(nAtom) bind(C, name='dftbp_get_nr_atoms')
     type(c_DftbPlus), intent(inout) :: handler

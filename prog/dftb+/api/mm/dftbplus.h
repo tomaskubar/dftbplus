@@ -222,6 +222,23 @@ void dftbp_set_coords_and_lattice_vecs(DftbPlus *instance, const double *coords,
 void dftbp_set_coords_lattice_origin(DftbPlus *instance, const double *coords,
                                        const double *latvecs, const double *origin);
 
+
+/**
+ * Sets the coordinates and magnitudes of external point charges (MM atoms).
+ *
+ * \param[inout] instance Handler of the DFTB+ instance.
+ *
+ * \param[in] nExtCharges Number of external point charges.
+ *
+ * \param[in] chargeCoords Coordinates of the point charges in atomic units.
+ *     Shape: [nExtCharges, 3]. Unit: Bohr.
+ *
+ * \param[in] chargeQs Magnitudes of the point charges. Shape: [nExtCharges].
+ */
+void dftbp_set_external_charges(DftbPlus *instance, const int *nExtCharges,
+                                  const double *chargeCoords, const double *chargeQs);
+
+
 /**
  * Queries the nr. of atoms in the system.
  *
