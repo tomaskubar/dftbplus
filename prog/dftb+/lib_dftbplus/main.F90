@@ -1308,8 +1308,7 @@ contains
         & this%tFixEf, this%spinW, this%thirdOrd, this%dftbU, this%iEqBlockDftbu,&
         & this%onSiteElements, this%iEqBlockOnSite, this%rangeSep, this%nNeighbourLC,&
         & this%pChrgMixer, this%taggedWriter, this%tWriteAutotest, autotestTag,&
-        & this%tWriteResultsTag, resultsTag, this%tWriteDetailedOut, this%fdDetailedOut,&
-        & this%tMulliken, this%dQdX)
+        & this%tWriteResultsTag, resultsTag, this%tMulliken, this%dQdX)
     call env%globalTimer%stopTimer(globalTimers%perturbQM)
     call env%globalTimer%startTimer(globalTimers%perturbMM)
     call dPsidxQMMM(env, this%parallelKS, this%filling, this%eigen, this%eigVecsReal,&
@@ -1320,8 +1319,7 @@ contains
         & this%tFixEf, this%spinW, this%thirdOrd, this%dftbU, this%iEqBlockDftbu,&
         & this%onSiteElements, this%iEqBlockOnSite, this%rangeSep, this%nNeighbourLC,&
         & this%pChrgMixer, this%taggedWriter, this%tWriteAutotest, autotestTag,&
-        & this%tWriteResultsTag, resultsTag, this%tWriteDetailedOut, this%fdDetailedOut,&
-        & this%tMulliken, this%dQdXext)
+        & this%tWriteResultsTag, resultsTag, this%tMulliken, this%dQdXext)
     call env%globalTimer%stopTimer(globalTimers%perturbMM)
   ! if (.not. allocated(this%sccCalc)) then
   !   call error ("Can only run coupled-perturbed DFTB with SCC (DFTB2 or DFTB3)")
@@ -1342,6 +1340,8 @@ contains
   !     & this%pChrgMixer)
   ! call env%globalTimer%stopTimer(globalTimers%perturbMM)
     call env%globalTimer%stopTimer(globalTimers%perturb)
+
+    call writeDetailedOut4a(this%fdDetailedOut, this%dQdX, this%dQdXext) ! this%nAtom, this%nExtChrg)
 
   end subroutine processChargeDerivatives
 

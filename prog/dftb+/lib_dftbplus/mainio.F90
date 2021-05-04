@@ -69,6 +69,7 @@ module dftbp_mainio
   public :: writeDetailedOut1, writeDetailedOut2, writeDetailedOut2Dets, writeDetailedOut3
   public :: writeDetailedOut4, writeDetailedOut5, writeDetailedOut6
   public :: writeDetailedOut7
+  public :: writeDetailedOut4a
   public :: writeMdOut1, writeMdOut2, writeMdOut3
   public :: writeCharges
   public :: writeEsp
@@ -3254,6 +3255,50 @@ contains
     end if
 
   end subroutine writeDetailedOut4
+
+
+  !> Second group of data for detailed.out
+  subroutine writeDetailedOut4a(fd, dQdX, dQdXext)
+
+    !> File ID
+    integer, intent(in) :: fd
+
+    !> Derivatives of charges w.r.t. atom coordinates
+    real(dp), intent(in) :: dQdX(:,:,:)
+
+    !> Derivatives of charges w.r.t. coordinates of ext. charges
+    real(dp), intent(in) :: dQdXext(:,:,:)
+
+    integer :: nAtom, nExtChg, iAtom, iExtChgWRT, iAtWRT
+
+    nAtom = size(dQdX, dim=3)
+    @:ASSERT(size(dQdX, dim=2) == 3)
+    @:ASSERT(size(dQdX, dim=1) == nAtom)
+
+    write (fd, "(A)") "Derivatives of atomic charges w.r.t. atomic coordinates"
+    do iAtWRT = 1, nAtom
+      write (fd, "(A,I5)") "   -- w.r.t. coordinates of atom ", iAtWRT
+      do iAtom = 1, nAtom
+        write (fd, "(I5,3F12.7)") iAtom, -dQdX(iAtom, :, iAtWRT)
+      end do
+    end do
+    write (fd, *)
+
+    if (size(dQdXext) > 0) then
+      nExtChg = size(dQdXext, dim=3)
+      @:ASSERT(size(dQdXext, dim=2) == 3)
+      @:ASSERT(size(dQdXext, dim=1) == nAtom)
+      write (fd, "(A)") "Derivatives of atomic charges w.r.t. coordinates of ext. charges"
+      do iExtChgWRT = 1, nExtChg
+        write (fd, "(A,I5)") "   -- w.r.t. coordinates of ext. charge ", iExtChgWRT
+        do iAtom = 1, nAtom
+          write (fd, "(I5,3F12.7)") iAtom, -dQdXext(iAtom, :, iExtChgWRT)
+        end do
+      end do
+      write (fd, *)
+    end if
+
+  end subroutine writeDetailedOut4a
 
 
   !> Third group of data for detailed.out

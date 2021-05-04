@@ -58,8 +58,7 @@ contains
       & nNeighbourSK, denseDesc, iSparseStart, img2CentCell, coord, sccCalc, maxSccIter, sccTol,&
       & nMixElements, nIneqMixElements, iEqOrbitals, tempElec, Ef, tFixEf, spinW, thirdOrd, dftbU,&
       & iEqBlockDftbu, onsMEs, iEqBlockOnSite, rangeSep, nNeighbourLC, pChrgMixer, taggedWriter,&
-      & tWriteAutoTest, autoTestTagFile, tWriteTaggedOut, taggedResultsFile, tWriteDetailedOut,&
-      & fdDetailedOut, tMulliken, dQdX)
+      & tWriteAutoTest, autoTestTagFile, tWriteTaggedOut, taggedResultsFile, tMulliken, dQdX)
 
     !> Environment settings
     type(TEnvironment), intent(inout) :: env
@@ -200,12 +199,6 @@ contains
 
     !> File name for machine readable results data
     character(*), intent(in) :: taggedResultsFile
-
-    !> should detailed.out be written to
-    logical, intent(in) :: tWriteDetailedOut
-
-    !> File id for detailed.out
-    integer, intent(in) :: fdDetailedOut
 
     !> Should Mulliken populations be generated/output
     logical, intent(in) :: tMulliken
