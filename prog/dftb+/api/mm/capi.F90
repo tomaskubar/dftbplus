@@ -492,9 +492,9 @@ contains
     nAtom = instance%nrOfAtoms()
     nExtCharge = instance%nrOfExtCharges()
 
-    call c_f_pointer(dQdX, ptr_dQdX, [nAtom, 3, nAtom])
+    call c_f_pointer(dQdX, ptr_dQdX, [3, nAtom, nAtom])
     if (nExtCharge > 0) then
-      call c_f_pointer(dQdXext, ptr_dQdXext, [nAtom, 3, nExtCharge])
+      call c_f_pointer(dQdXext, ptr_dQdXext, [3, nExtCharge, nAtom])
     end if
 
     if (nExtCharge > 0) then

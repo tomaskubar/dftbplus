@@ -444,34 +444,37 @@ contains
     !> Output: charge derivatives w.r.t. coordinates of external point charges
     real(dp), optional, intent(out) :: dQdXext(:,:,:)
 
-    @:ASSERT(size(dQdX, dim=1) == main%nAtom)
-    @:ASSERT(size(dQdX, dim=2) == 3)
+    integer :: iAtomWRT, iExtChgWRT, iAtom
+
+    @:ASSERT(size(dQdX, dim=1) == 3)
+    @:ASSERT(size(dQdX, dim=2) == main%nAtom)
     @:ASSERT(size(dQdX, dim=3) == main%nAtom)
     if (main%nExtChrg > 0) then
-      @:ASSERT(size(dQdXext, dim=1) == main%nAtom)
-      @:ASSERT(size(dQdXext, dim=2) == 3)
-      @:ASSERT(size(dQdXext, dim=3) == main%nExtChrg)
+      @:ASSERT(size(dQdXext, dim=1) == 3)
+      @:ASSERT(size(dQdXext, dim=2) == main%nExtChrg)
+      @:ASSERT(size(dQdXext, dim=3) == main%nAtom)
     end if
 
     ! run the calculation
     call processChargeDerivatives(env, main)
 
-  ! if (allocated(dQdX)) then
-  !   deallocate(dQdX)
-  ! end if
-  ! allocate(dQdX(main%nAtom, 3, main%nAtom))
-    dQdX(:,:,:) = - main%dQdX(:,:,:)
+  ! dQdX(:,:,:) = - main%dQdX(:,:,:)
+    do iAtomWRT = 1, main%nAtom
+      do iAtom = 1, main%nAtom
+        dQdX(:, iAtomWRT, iAtom) = - main%dQdX(iAtom, :, iAtomWRT)
+      end do
+    end do
 
     if (present(dQdXext) .and. main%nExtChrg > 0) then
-    ! if (allocated(dQdXext)) then
-    !   deallocate(dQdXext)
-    ! end if
-    ! allocate(dQdXext(main%nAtom, 3, main%nExtChrg))
-      dQdXext(:,:,:) = - main%dQdXext(:,:,:)
+    ! dQdXext(:,:,:) = - main%dQdXext(:,:,:)
+      do iExtChgWRT = 1, main%nExtChrg
+        do iAtom = 1, main%nAtom
+          dQdXext(:, iExtChgWRT, iAtom) = - main%dQdXext(iAtom, :, iExtChgWRT)
+        end do
+      end do
     end if
 
   end subroutine getChargeDerivatives
-
 
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
