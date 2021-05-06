@@ -129,7 +129,7 @@ contains
 
 
   !> Parse input from an HSD/XML file
-  subroutine parseHsdTree(hsdTree, input, parserFlags)
+  subroutine parseHsdTree(hsdTree, input, parserFlags, nExtCharge)
 
     !> Tree representation of the input
     type(fnode), pointer :: hsdTree
@@ -139,6 +139,9 @@ contains
 
     !> Special block containings parser related settings
     type(TParserFlags), intent(out) :: parserFlags
+
+    !> Number of external point charges
+    integer, intent(in), optional :: nExtCharge
 
     type(fnode), pointer :: root, tmp, driverNode, hamNode, analysisNode, child, dummy
     logical :: tReadAnalysis
@@ -198,7 +201,11 @@ contains
 
     ! electronic Hamiltonian
     call getChildValue(root, "Hamiltonian", hamNode)
-    call readHamiltonian(hamNode, input%ctrl, input%geom, input%slako, input%poisson)
+    if (present(nExtCharge)) then
+      call readHamiltonian(hamNode, input%ctrl, input%geom, input%slako, input%poisson, nExtCharge)
+    else
+      call readHamiltonian(hamNode, input%ctrl, input%geom, input%slako, input%poisson)
+    end if
 
   #:endif
 
@@ -1119,7 +1126,7 @@ contains
 #:if WITH_TRANSPORT
   subroutine readHamiltonian(node, ctrl, geo, slako, tp, greendens, poisson)
 #:else
-  subroutine readHamiltonian(node, ctrl, geo, slako, poisson)
+  subroutine readHamiltonian(node, ctrl, geo, slako, poisson, nExtCharge)
 #:endif
 
     !> Node to get the information from
@@ -1145,6 +1152,9 @@ contains
     !> Poisson solver paramenters
     type(TPoissonInfo), intent(inout) :: poisson
 
+    !> Number of external point charges
+    integer, intent(in), optional :: nExtCharge
+
     type(string) :: buffer
 
     call getNodeName(node, buffer)
@@ -1153,7 +1163,11 @@ contains
   #:if WITH_TRANSPORT
       call readDFTBHam(node, ctrl, geo, slako, tp, greendens, poisson)
   #:else
-      call readDFTBHam(node, ctrl, geo, slako, poisson)
+      if (present(nExtCharge)) then
+        call readDFTBHam(node, ctrl, geo, slako, poisson, nExtCharge)
+      else
+        call readDFTBHam(node, ctrl, geo, slako, poisson)
+      end if
   #:endif
     case default
       call detailedError(node, "Invalid Hamiltonian")
@@ -1166,7 +1180,7 @@ contains
 #:if WITH_TRANSPORT
   subroutine readDFTBHam(node, ctrl, geo, slako, tp, greendens, poisson)
 #:else
-  subroutine readDFTBHam(node, ctrl, geo, slako, poisson)
+  subroutine readDFTBHam(node, ctrl, geo, slako, poisson, nExtCharge)
 #:endif
 
     !> Node to get the information from
@@ -1180,6 +1194,9 @@ contains
 
     !> Slater-Koster structure to be filled
     type(TSlater), intent(inout) :: slako
+
+    !> Number of external point charges
+    integer, intent(in), optional :: nExtCharge
 
   #:if WITH_TRANSPORT
     !> Transport parameters
@@ -1415,7 +1432,19 @@ contains
     ctrl%tReadShifts = .false.
 
     ! External electric field
-    call readExternal(node, ctrl, geo)
+    if (present(nExtCharge)) then
+      ! The number of external point charges due to MM atoms
+      !   has been provided through the QM/MM interface (variable nExtCharge)
+      if (.not. ctrl%tSCC) then
+        call error("External charges can only be used in an SCC calculation")
+      end if
+      ctrl%nExtChrg = nExtCharge
+      allocate(ctrl%extChrg(4, ctrl%nExtChrg))
+      ctrl%extChrg(:,:) = 0._dp
+    else
+      ! standard DFTB+ procedure
+      call readExternal(node, ctrl, geo)
+    end if
 
     call getChild(node, "SpinOrbit", child, requested=.false.)
     if (.not. associated(child)) then

@@ -323,7 +323,7 @@ contains
 
 
   !> Sets up the calculator using a given input.
-  subroutine TDftbPlus_setupCalculator(this, input, atomList)
+  subroutine TDftbPlus_setupCalculator(this, input, atomList, nExtCharge)
 
     !> Instance.
     class(TDftbPlus), intent(inout) :: this
@@ -334,6 +334,9 @@ contains
     !> List of atoms and species
     type(TDftbPlusAtomList), intent(inout), optional :: atomList
 
+    !> Number of external point charges
+    integer, intent(in), optional :: nExtCharge
+
     type(TParserFlags) :: parserFlags
     type(TInputData) :: inpData
 
@@ -342,7 +345,11 @@ contains
     if (present(atomList)) then
       call atomList%add(inpData)
     end if
-    call parseHsdTree(input%hsdTree, inpData, parserFlags)
+    if (present(nExtCharge)) then
+      call parseHsdTree(input%hsdTree, inpData, parserFlags, nExtCharge)
+    else
+      call parseHsdTree(input%hsdTree, inpData, parserFlags)
+    end if
     call doPostParseJobs(input%hsdTree, parserFlags)
     call this%main%initProgramVariables(inpData, this%env)
 
