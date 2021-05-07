@@ -3266,8 +3266,11 @@ contains
     !> Derivatives of charges w.r.t. atom coordinates
     real(dp), intent(in) :: dQdX(:,:,:)
 
+    !> Are there derivatives w.r.t. coordinates of ext. charges?
+    logical :: tExtChg
+
     !> Derivatives of charges w.r.t. coordinates of ext. charges
-    real(dp), intent(in) :: dQdXext(:,:,:)
+    real(dp), intent(in), optional :: dQdXext(:,:,:)
 
     integer :: nAtom, nExtChg, iAtom, iExtChgWRT, iAtWRT
 
@@ -3284,7 +3287,7 @@ contains
     end do
     write (fd, *)
 
-    if (size(dQdXext) > 0) then
+    if (present(dQdXext)) then
       nExtChg = size(dQdXext, dim=3)
       @:ASSERT(size(dQdXext, dim=2) == 3)
       @:ASSERT(size(dQdXext, dim=1) == nAtom)

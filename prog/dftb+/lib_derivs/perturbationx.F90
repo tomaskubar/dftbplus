@@ -204,7 +204,7 @@ contains
     logical, intent(in) :: tMulliken
 
     !> Output, charge derivatives
-    real(dp), allocatable, intent(out) :: dQdX(:,:,:)
+    real(dp), allocatable, intent(inout) :: dQdX(:,:,:)
 
     integer :: iS, iK, iKS, iAt, iCart, iLev, iSh, iSp, jAt, iOrb ! jCart
 
@@ -856,10 +856,9 @@ contains
       write (stdOut, *)
 
       ! save output -- spin channel 1
-      if (allocated(dQdX)) then
-        deallocate(dQdX)
-      end if
-      allocate(dQdX(nAtom, 3, nAtom))
+      @:ASSERT(size(dQdX, dim=1) == nAtom)
+      @:ASSERT(size(dQdX, dim=2) == 3)
+      @:ASSERT(size(dQdX, dim=3) == nAtom)
       do iAt = 1, nAtom
         do iCart = 1, 3
           dQdX(:, iCart, iAt) = sum(dqOut(:, :, 1, iCart, iAt), dim=1)

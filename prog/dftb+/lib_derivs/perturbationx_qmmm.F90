@@ -190,7 +190,7 @@ contains
     logical, intent(in) :: tMulliken
 
     !> Output, charge derivatives
-    real(dp), allocatable, intent(out) :: dQdXext(:,:,:)
+    real(dp), allocatable, intent(inout) :: dQdXext(:,:,:)
 
     integer :: iS, iK, iKS, iExtchg, iCart, iLev, iSh, iSp, jAt ! iAt, jCart 
 
@@ -662,10 +662,9 @@ contains
       write (stdOut, *)
 
       ! save output -- spin channel 1
-      if (allocated(dQdXext)) then
-        deallocate(dQdXext)
-      end if
-      allocate(dQdXext(nAtom, 3, nExtCharge))
+      @:ASSERT(size(dQdXext, dim=1) == nAtom)
+      @:ASSERT(size(dQdXext, dim=2) == 3)
+      @:ASSERT(size(dQdXext, dim=3) == nExtCharge)
       do iExtChg = 1, nExtCharge
         do iCart = 1, 3
           dQdXext(:, iCart, iExtChg) = sum(dqOut(:, :, 1, iCart, iExtChg), dim=1)

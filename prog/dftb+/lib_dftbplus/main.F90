@@ -1298,7 +1298,12 @@ contains
     type(TDftbPlusMain), intent(inout) :: this
 
     call env%globalTimer%startTimer(globalTimers%perturb)
+
     call env%globalTimer%startTimer(globalTimers%perturbQM)
+    if (allocated(this%dQdX)) then
+      deallocate(this%dQdX)
+    end if
+    allocate(this%dQdX(this%nAtom, 3, this%nAtom))
     call dPsidx(env, this%parallelKS, this%filling, this%eigen, this%eigVecsReal, this%rhoPrim,&
         & this%potential, this%qOutput, this%q0, this%ham, this%over, this%skHamCont,&
         & this%skOverCont, this%nonSccDeriv, this%orb, this%nAtom, this%species,&
@@ -1310,17 +1315,25 @@ contains
         & this%pChrgMixer, this%taggedWriter, this%tWriteAutotest, autotestTag,&
         & this%tWriteResultsTag, resultsTag, this%tMulliken, this%dQdX)
     call env%globalTimer%stopTimer(globalTimers%perturbQM)
-    call env%globalTimer%startTimer(globalTimers%perturbMM)
-    call dPsidxQMMM(env, this%parallelKS, this%filling, this%eigen, this%eigVecsReal,&
-        & this%qOutput, this%q0, this%ham, this%over, this%orb, this%nAtom, this%species,&
-        & this%neighbourList, this%nNeighbourSK, this%denseDesc, this%iSparseStart,&
-        & this%img2CentCell, this%coord, this%sccCalc, this%maxSccIter, this%sccTol,&
-        & this%nMixElements, this%nIneqOrb, this%iEqOrbitals, this%tempElec, this%Ef,&
-        & this%tFixEf, this%spinW, this%thirdOrd, this%dftbU, this%iEqBlockDftbu,&
-        & this%onSiteElements, this%iEqBlockOnSite, this%rangeSep, this%nNeighbourLC,&
-        & this%pChrgMixer, this%taggedWriter, this%tWriteAutotest, autotestTag,&
-        & this%tWriteResultsTag, resultsTag, this%tMulliken, this%dQdXext)
-    call env%globalTimer%stopTimer(globalTimers%perturbMM)
+
+    if (this%nExtChrg > 0) then
+      call env%globalTimer%startTimer(globalTimers%perturbMM)
+      if (allocated(this%dQdXext)) then
+        deallocate(this%dQdXext)
+      end if
+      allocate(this%dQdXext(this%nAtom, 3, this%nExtChrg))
+      call dPsidxQMMM(env, this%parallelKS, this%filling, this%eigen, this%eigVecsReal,&
+          & this%qOutput, this%q0, this%ham, this%over, this%orb, this%nAtom, this%species,&
+          & this%neighbourList, this%nNeighbourSK, this%denseDesc, this%iSparseStart,&
+          & this%img2CentCell, this%coord, this%sccCalc, this%maxSccIter, this%sccTol,&
+          & this%nMixElements, this%nIneqOrb, this%iEqOrbitals, this%tempElec, this%Ef,&
+          & this%tFixEf, this%spinW, this%thirdOrd, this%dftbU, this%iEqBlockDftbu,&
+          & this%onSiteElements, this%iEqBlockOnSite, this%rangeSep, this%nNeighbourLC,&
+          & this%pChrgMixer, this%taggedWriter, this%tWriteAutotest, autotestTag,&
+          & this%tWriteResultsTag, resultsTag, this%tMulliken, this%dQdXext)
+      call env%globalTimer%stopTimer(globalTimers%perturbMM)
+    end if
+
   ! if (.not. allocated(this%sccCalc)) then
   !   call error ("Can only run coupled-perturbed DFTB with SCC (DFTB2 or DFTB3)")
   ! end if
@@ -1339,9 +1352,14 @@ contains
   !     & this%sccCalc, this%maxSccIter, this%sccTol, this%tempElec, this%thirdOrd,&
   !     & this%pChrgMixer)
   ! call env%globalTimer%stopTimer(globalTimers%perturbMM)
+
     call env%globalTimer%stopTimer(globalTimers%perturb)
 
-    call writeDetailedOut4a(this%fdDetailedOut, this%dQdX, this%dQdXext) ! this%nAtom, this%nExtChrg)
+    if (this%nExtChrg > 0) then
+      call writeDetailedOut4a(this%fdDetailedOut, this%dQdX, this%dQdXext)
+    else
+      call writeDetailedOut4a(this%fdDetailedOut, this%dQdX)
+    end if
 
   end subroutine processChargeDerivatives
 
