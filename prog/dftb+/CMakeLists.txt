@@ -21,6 +21,7 @@ set(ALL-SOURCES-FPP)
 set(ALL-SOURCES-C)
 
 add_subdirectory(lib_common)
+add_subdirectory(lib_cpe)
 add_subdirectory(lib_derivs)
 add_subdirectory(lib_dftb)
 add_subdirectory(lib_dftbplus)

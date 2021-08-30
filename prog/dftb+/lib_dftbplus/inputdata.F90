@@ -40,6 +40,7 @@ module dftbp_inputdata
   use libnegf_vars
 #:endif
   use poisson_init
+  use dftbp_cpeinp
 
   implicit none
   private
@@ -520,6 +521,9 @@ module dftbp_inputdata
 
     !> REKS input
     type(TReksInp) :: reksInp
+
+    !> CPE input
+    type(TCpeInp) :: cpeInp
 
   end type TControl
 
