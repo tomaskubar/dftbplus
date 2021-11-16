@@ -538,6 +538,37 @@ contains
   end subroutine c_DftbPlus_getHamilOverl
 
 
+  !> Check and possibly invert the sign/phase of frontier orbitals
+  subroutine c_DftbPlus_checkInvertPhase(handler, atomIndexSign, nFrontiersC, frontiers, firstStepC)&
+      & bind(C, name='dftbp_check_invert_phase')
+
+    !> handler for the calculation
+    type(c_DftbPlus), intent(inout) :: handler
+
+    !> set of three atoms to define the plane of the molecule
+    integer(c_int), intent(in) :: atomIndexSign(3)
+
+    !> number of frontier orbitals to check the phase
+    integer(c_int), intent(in) :: nFrontiersC
+
+    !> indices of frontier orbitals to check the phase
+    integer(c_int), intent(in) :: frontiers(*)
+
+    !> is this the first step of the simulation?
+    logical(c_bool), intent(in) :: firstStepC
+
+    type(TDftbPlusC), pointer :: instance
+    integer :: nFrontiers
+    logical :: firstStep
+
+    call c_f_pointer(handler%instance, instance)
+    nFrontiers = nFrontiersC
+    firstStep = firstStepC
+    call instance%checkInvertPhase(atomIndexSign, nFrontiers, frontiers(1:nFrontiers), firstStep)
+
+  end subroutine c_DftbPlus_checkInvertPhase
+
+
   !> Obtain the pointers to DFTB+ data (phase 1 of the FMO calculation)
   subroutine c_DftbPlus_getPointersToPhase1(handler, ptrsPhase1)&
       & bind(C, name='dftbp_get_pointers_phase1')

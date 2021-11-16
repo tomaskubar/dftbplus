@@ -41,6 +41,7 @@ module dftbp_fmo
 
   public :: TPointersToPhase1
   public :: processGeometryPhase2
+  public :: checkInvertPhase
 
   ! there will be an array of these structures, one for each fragment/site
   type :: TPointersToPhase1
@@ -501,5 +502,159 @@ contains
     tijOrtho = matmul(sij, matmul(tij,sij))
 
   end subroutine orthogonalizeHamiltonian
+
+
+  !> Check and possibly invert the phase of frontier orbitals
+  subroutine checkInvertPhase(env, atomIndexSign, nFrontiers, frontiers, firstStep, nOrb,&
+      & iAtomStart, coord0, SSqrReal, eigVecsReal, oldEigVecsReal, frontierOverlap)
+
+    !> instance
+    type(TEnvironment), intent(inout) :: env
+
+    !> set of three atoms to define the plane of the molecule
+    integer, intent(in) :: atomIndexSign(3)
+
+    !> number of frontier orbitals to check the phase
+    integer, intent(in) :: nFrontiers
+
+    !> indices of frontier orbitals to check the phase
+    integer, intent(in) :: frontiers(:)
+
+    !> is this the first step of the simulation?
+    logical, intent(in) :: firstStep
+
+    !> total number of atomic/molecular orbitals in the fragment
+    integer, intent(in) :: nOrb
+
+    !> starting index of orbitals belonging to the atoms
+    integer, intent(in) :: iAtomStart(:)
+
+    !> coordinates of atoms
+    real(dp), intent(in) :: coord0(:,:)
+
+    !> overlap matrix in dense representation
+    real(dp), intent(in) :: SSqrReal(:,:)
+
+    !> molecular orbitals of the fragment in dense representation
+    real(dp), intent(inout) :: eigVecsReal(:,:)
+
+    !> eigVecsReal in the previous step of MD
+    real(dp), allocatable, intent(inout) :: oldEigVecsReal(:,:)
+
+    !> overlap of eigVecs between this step of MD and the previous step
+    real(dp), allocatable, intent(inout) :: frontierOverlap(:,:)
+
+    integer :: iEig, jEig, iFrontier, jFrontier, iCart, iCartOrb, iAtomStart1, iAtom, iAO, jAO
+    real(dp) :: coord(3,3), vector1(3), vector2(3), normalVec(3), normEigVec, normNormalVec, projection
+
+
+    ! use p-orbital and normal vector of the molecule plane to fix the sign of electronic coupling
+    !   -- originally implemented by Weiwei Xie
+
+    do iAtom = 1, 3
+      coord(:, iAtom) = coord0(:, atomIndexSign(iAtom))
+    end do
+
+    !! p-orbital scheme to fix the sign of coefficients
+
+    !! define normal vector of the molecule plane
+    vector1(:) = coord(:, 1) - coord(:, 3)
+    vector2(:) = coord(:, 2) - coord(:, 3)
+    normalVec(1) = vector1(2)*vector2(3) - vector1(3)*vector2(2);
+    normalVec(2) = vector1(3)*vector2(1) - vector1(1)*vector2(3);
+    normalVec(3) = vector1(1)*vector2(2) - vector1(2)*vector2(1);
+    normNormalVec = sqrt(normalVec(1)**2 + normalVec(2)**2 + normalVec(3)**2)
+
+    if (firstStep) then
+      if (.not. allocated(oldEigVecsReal)) then
+        allocate(oldEigVecsReal(nOrb, nOrb))
+      end if
+      if (.not. allocated(frontierOverlap)) then
+        allocate(frontierOverlap(nFrontiers, nFrontiers))
+      end if
+
+      iAtomStart1 = iAtomStart(atomIndexSign(1))
+
+      ! consider the frontier orbitals
+      do iFrontier = 1, nFrontiers
+        iEig = frontiers(iFrontier)
+
+      ! write (*,'(6F12.7)') eigVecsReal(:, iEig, 1)
+
+        projection = 0._dp
+        normEigVec = 0._dp
+        do iCart = 1, 3
+          ! px->3, py->1, pz->2 (shift w.r.t. iAtomStart1; orbital s->0 not used)
+          iCartOrb = modulo(iCart + 1, 3) + 1
+          projection = projection + normalVec(iCart) * eigVecsReal(iAtomStart1 + iCartOrb, iEig)
+          normEigVec = normEigVec + eigVecsReal(iAtomStart1 + iCartOrb, iEig)
+        end do
+        normEigVec = sqrt(normEigVec)
+
+        projection = projection / sqrt(normNormalVec) / sqrt(normEigVec)
+
+        if (projection < 0._dp) then
+          eigVecsReal(:, iEig) = - eigVecsReal(:, iEig)
+          write (*,'(A,I4,A,F8.5)') "Change the sign of initial phase for iEig = ", iEig,&
+              & ", projection = ", projection
+        end if
+      end do
+
+    else
+
+      ! calculate the overlap with the frontier orbital in the previous step
+      ! NOTE: this will be also needed later by project_wf_on_new_basis() if FOs are degenerated.
+      do iFrontier = 1, nFrontiers
+        iEig = frontiers(iFrontier)
+        do jFrontier = 1, nFrontiers
+          jEig = frontiers(jFrontier)
+          frontierOverlap(iFrontier, jFrontier) = 0._dp
+          do iAO = 1, nOrb
+            do jAO = 1, nOrb
+              frontierOverlap(iFrontier, jFrontier) = frontierOverlap(iFrontier, jFrontier)&
+                  & + eigVecsReal(iAO, iEig) * SSqrReal(iAO, jAO) * oldEigVecsReal(jAO, jEig)
+            end do
+          end do
+        end do
+      end do
+
+      write (*,*) "frontierOverlap = ", frontierOverlap(:,:)
+
+      ! invert the sign if needed
+      do iFrontier = 1, nFrontiers
+        iEig = frontiers(iFrontier)
+        if (frontierOverlap(iFrontier, iFrontier) < 0._dp) then
+          eigVecsReal(:, iEig) = - eigVecsReal(:, iEig)
+        end if
+        if (abs(frontierOverlap(iFrontier, iFrontier)) < 0.9) then
+          write (*,'(A,I2,A,F8.5)') "warning: strong change of shape for orbital", iEig,&
+              & "between two steps! overlap = ", frontierOverlap(iFrontier, iFrontier)
+          ! stop
+        end if
+      end do
+
+      ! calculate the overlap once again, with the corrected (inverted) orbitals
+      do iFrontier = 1, nFrontiers
+        iEig = frontiers(iFrontier)
+        do jFrontier = 1, nFrontiers
+          jEig = frontiers(jFrontier)
+          frontierOverlap(iFrontier, jFrontier) = 0._dp
+          do iAO = 1, nOrb
+            do jAO = 1, nOrb
+              frontierOverlap(iFrontier, jFrontier) = frontierOverlap(iFrontier, jFrontier)&
+                  & + eigVecsReal(iAO, iEig) * SSqrReal(iAO, jAO) * oldEigVecsReal(jAO, jEig)
+            end do
+          end do
+        end do
+      end do
+
+      write (*,*) "frontierOverlap'= ", frontierOverlap(:,:)
+
+    end if
+
+    ! update the "old" array
+    oldEigVecsReal(:,:) = eigVecsReal(:,:)
+
+  end subroutine checkInvertPhase
 
 end module dftbp_fmo

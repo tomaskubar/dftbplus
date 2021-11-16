@@ -1038,6 +1038,12 @@ module dftbp_initprogram
     !> atomic charge contribution in excited state
     real(dp), allocatable :: dQAtomEx(:)
 
+    !> for FMO: eigenvectors in the previous step of the simulation
+    real(dp), allocatable :: oldEigVecsReal(:,:)
+
+    !> for FMO: overlap of eigenvectors between consecutive step of the simulation
+    real(dp), allocatable :: frontierOverlap(:,:)
+
     !> Dynamic user output file name
     character(len = 100) :: userOut
 

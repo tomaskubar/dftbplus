@@ -25,7 +25,7 @@ module dftbp_mmapi
   use dftbp_qdepextpotproxy, only : TQDepExtPotProxy, TQDepExtPotProxy_init
   use dftbp_charmanip, only : newline
   use dftbp_initprogram, only: TDftbPlusMain
-  use dftbp_fmo, only : TPointersToPhase1
+  use dftbp_fmo, only : TPointersToPhase1, checkInvertPhase
   use dftbp_sparse2dense, only : unpackHS
   implicit none
   private
@@ -116,6 +116,8 @@ module dftbp_mmapi
     procedure :: getEigenVectors => TDftbPlus_getEigenVectors
     !> get the DFTB+ hamiltonian and overlap matrices
     procedure :: getHamilOverl => TDftbPlus_getHamilOverl
+    !> check and possibly invert the phase of frontier orbitals
+    procedure :: checkInvertPhase => TDftbPlus_checkInvertPhase
     !> get pointers to phase 1 of the DFTB-FMO calculation
     procedure :: getPointersToPhase1 => TDftbPlus_getPointersToPhase1
     !> init pointers to phase 1 of the DFTB-FMO calculation
@@ -759,6 +761,33 @@ contains
     call getHamilOverl(this%env, this%main, hamil, overl)
 
   end subroutine TDftbPlus_getHamilOverl
+
+
+  !> Check and possibly invert the phase of frontier orbitals
+  subroutine TDftbPlus_checkInvertPhase(this, atomIndexSign, nFrontiers, frontiers, firstStep)
+
+    !> Instance
+    class(TDftbPlus), intent(inout) :: this
+
+    !> set of three atoms to define the plane of the molecule
+    integer, intent(in) :: atomIndexSign(3)
+
+    !> number of frontier orbitals to check the phase
+    integer, intent(in) :: nFrontiers
+
+    !> indices of frontier orbitals to check the phase
+    integer, intent(in) :: frontiers(:)
+
+    !> is this the first step of the simulation?
+    logical, intent(in) :: firstStep
+
+  ! call checkInvertPhase(this%env, this%main, atomIndexSign, nFrontiers, frontiers(1:nFrontiers), firstStep)
+    call checkInvertPhase(this%env, atomIndexSign, nFrontiers, frontiers(1:nFrontiers), firstStep,&
+        & this%main%denseDesc%nOrb, this%main%denseDesc%iAtomStart, this%main%coord0,&
+        & this%main%SSqrReal, this%main%eigVecsReal(:,:,1), this%main%oldEigVecsReal,&
+        & this%main%frontierOverlap)
+
+  end subroutine TDftbPlus_checkInvertPhase
 
 
   !> This is called before after finishing the phase 2 of the FMO calculation:
