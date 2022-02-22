@@ -180,7 +180,7 @@ contains
       end if
       cpuTime = this%cpuTimes(iTimer)
       wallTime = this%wallClockTimes(iTimer)
-      if (abs(cpuTime) < 1e-2_dp .and. abs(wallTime) < 1e-2) then
+      if (abs(cpuTime) < 1e-3_dp .and. abs(wallTime) < 1e-3) then
         cycle
       end if
       prefix = repeat(" ", 2 * (level - 1))
@@ -189,7 +189,7 @@ contains
       else
         operation = " "
       end if
-      write(fp, "(A,A,T40,A,T42,F8.2,2X,'(',F5.1,'%)',T62,F8.2,2X,'(',F5.1,'%)')")&
+      write(fp, "(A,A,T40,A,T42,F9.3,2X,'(',F5.1,'%)',T62,F9.3,2X,'(',F5.1,'%)')")&
           & prefix, trim(this%timerNames(iTimer)), operation, cpuTime,&
           & (cpuTime / totalCpu) * 100.0_dp, wallTime, (wallTime / totalWall) * 100.0_dp
       if (this%timerLevels(iTimer) == 1) then
@@ -198,10 +198,10 @@ contains
       end if
     end do
     write(fp, "(A)") repeat("-", 80)
-    write(fp, "(A,T40,A,T42,F8.2,2X,'(',F5.1,'%)',T62,F8.2,2X,'(',F5.1,'%)')")&
+    write(fp, "(A,T40,A,T42,F9.3,2X,'(',F5.1,'%)',T62,F9.3,2X,'(',F5.1,'%)')")&
         & "Missing", "+", abs(totalCpu - allCpu), abs(totalCpu - allCpu) / totalCpu * 100.0_dp,&
         & abs(totalWall - allWall), abs(totalWall - allWall) / totalWall * 100.0_dp
-    write(fp, "(A,T40,A,T42,F8.2,2X,'(',F5.1,'%)',T62,F8.2,2X,'(',F5.1,'%)')")&
+    write(fp, "(A,T40,A,T42,F9.3,2X,'(',F5.1,'%)',T62,F9.3,2X,'(',F5.1,'%)')")&
         & "Total", "=", totalCpu, 100.0_dp, totalWall, 100.0_dp
     write(fp, "(A)") repeat("-", 80)
 

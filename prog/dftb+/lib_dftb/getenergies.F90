@@ -328,7 +328,7 @@ contains
         & + energy%atomLS + energy%atomExt + energy%atom3rd + energy%atomOnSite &
         & + energy%atomSolv
     energy%atomTotal(:) = energy%atomElec + energy%atomRep + energy%atomDisp + energy%atomHalogenX
-    energy%Etotal = energy%Eelec + energy%Erep + energy%eDisp + energy%eHalogenX
+    energy%Etotal = energy%Eelec + energy%Erep + energy%eDisp + energy%eHalogenX + energy%EML
     energy%EMermin = energy%Etotal - sum(energy%TS)
     ! energy extrapolated to 0 K
     energy%Ezero = energy%Etotal - 0.5_dp * sum(energy%TS)
