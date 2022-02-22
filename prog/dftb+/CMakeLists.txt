@@ -40,6 +40,7 @@ add_subdirectory(lib_solvation)
 if(WITH_API)
   add_subdirectory(api/mm)
 endif()
+add_subdirectory(lib_machinelearning)
 
 dftbp_preprocess("${FYPP}" "${fypp_flags}" "F90" "f90" "${ALL-SOURCES-FPP}" all-sources-f90-preproc)
 

@@ -115,8 +115,10 @@ module dftbp_initprogram
   use poisson_init
   use dftbp_transportio
   use dftbp_determinants
+  use dftbp_machinelearning
   use dftbp_cpeinp
   use dftbp_cpecalc
+  
   implicit none
 
 #:if not WITH_TRANSPORT
@@ -1040,6 +1042,9 @@ module dftbp_initprogram
     !> atomic charge contribution in excited state
     real(dp), allocatable :: dQAtomEx(:)
 
+    !> Correction based on machine learning
+    type(TMachineLearning), allocatable :: machineLearning
+    
     !> chemical potential equilibration (CPE)
     type(TCpeCalc), allocatable :: cpe
 
@@ -1637,6 +1642,12 @@ contains
       call THalogenX_init(this%halogenXCorrection, this%species0, this%speciesName)
     end if
 
+    if (input%ctrl%tMachineLearning) then
+      allocate(this%machineLearning)
+      call this%machineLearning%init(input%ctrl%machineLearningInp, this%nAtom, this%nType,&
+          & this%species0)
+    end if
+    
     allocate(this%referenceN0(this%orb%mShell, this%nType))
     allocate(this%mass(this%nAtom))
     this%mass = this%speciesMass(this%species0)
@@ -3244,6 +3255,9 @@ contains
     write(stdOut, "(A,':')") "Extra options"
     if (this%tPrintMulliken) then
       write(stdOut, "(T30,A)") "Mulliken analysis"
+    end if
+    if (input%ctrl%tMachineLearning) then
+      write(stdOut, "(T30,A)") "Machine learning based correction"
     end if
     if (this%tPrintForces .and. .not. (this%tMD .or. this%isGeoOpt .or. this%tDerivs)) then
       write(stdOut, "(T30,A)") "Force calculation"

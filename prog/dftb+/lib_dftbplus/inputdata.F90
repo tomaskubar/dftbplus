@@ -40,6 +40,7 @@ module dftbp_inputdata
   use libnegf_vars
 #:endif
   use poisson_init
+  use dftbp_machinelearning
   use dftbp_cpeinp
 
   implicit none
@@ -422,6 +423,9 @@ module dftbp_inputdata
     !> Halogen X correction
     logical :: tHalogenX = .false.
 
+    !> Machine learning correction
+    logical :: tMachineLearning = .false.
+
     !> Old repulsive
     logical :: useBuggyRepSum
 
@@ -521,6 +525,9 @@ module dftbp_inputdata
 
     !> REKS input
     type(TReksInp) :: reksInp
+
+    !> Correction based on machine learning
+    type(TMachineLearningInp), allocatable :: machineLearningInp
 
     !> CPE input
     type(TCpeInp) :: cpeInp
