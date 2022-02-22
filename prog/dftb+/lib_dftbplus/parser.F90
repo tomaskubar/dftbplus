@@ -1687,6 +1687,7 @@ contains
     call getChildValue(node, "MachineLearning", value1, "", child=child, &
         &allowEmptyValue=.true., dummyValue=.true.)
     if (associated(value1)) then
+      ctrl%tMachineLearning = .true.
       allocate(ctrl%machineLearningInp)
       call readMachineLearning(child, geo, ctrl%machineLearningInp)
     end if

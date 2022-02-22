@@ -1623,9 +1623,10 @@ contains
       call THalogenX_init(this%halogenXCorrection, this%species0, this%speciesName)
     end if
 
-    if (allocated(input%ctrl%machineLearningInp)) then
+    if (input%ctrl%tMachineLearning) then
       allocate(this%machineLearning)
-      call this%machineLearning%init(input%ctrl%machineLearningInp, this%nAtom, this%nType, this%species0)
+      call this%machineLearning%init(input%ctrl%machineLearningInp, this%nAtom, this%nType,&
+          & this%species0)
     end if
     
     allocate(this%referenceN0(this%orb%mShell, this%nType))
@@ -3234,7 +3235,7 @@ contains
     if (this%tPrintMulliken) then
       write(stdOut, "(T30,A)") "Mulliken analysis"
     end if
-    if (allocated(input%ctrl%machineLearningInp)) then
+    if (input%ctrl%tMachineLearning) then
       write(stdOut, "(T30,A)") "Machine learning based correction"
     end if
     if (this%tPrintForces .and. .not. (this%tMD .or. this%isGeoOpt .or. this%tDerivs)) then

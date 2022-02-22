@@ -422,6 +422,9 @@ module dftbp_inputdata
     !> Halogen X correction
     logical :: tHalogenX = .false.
 
+    !> Machine learning correction
+    logical :: tMachineLearning = .false.
+
     !> Old repulsive
     logical :: useBuggyRepSum
 
