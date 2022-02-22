@@ -5,32 +5,34 @@
 !  See the LICENSE file for terms of usage and distribution.                                       !
 !--------------------------------------------------------------------------------------------------!
 
-module dftbp_hamiltoniantypes
+!> Chemical potential equilibration (CPE)
+!>
+module dftbp_cpeinp
+
+  use dftbp_accuracy
+
   implicit none
+
   private
 
-  public :: hamiltonianTypes
+  public :: TCpeInp
 
-  !> Namespace for possible hamiltonian models
-  type :: THamiltonianTypesEnum
+  !> Data type for initial values for CPE
+  type :: TCpeInp
 
-    ! Hamiltonian models
+    !> Electronegativity per species
+    real(dp), allocatable :: electronegativity(:)
 
-    !> Dummy none
-    integer :: none = 0
+    !> Chemical hardness per species
+    real(dp), allocatable :: hardness(:)
 
-    !> DFTB
-    integer :: dftb = 1
+    !> Covalent radius per species
+    real(dp), allocatable :: radius(:)
 
-    !> XTB
-    integer :: xtb = 2
+    !> Total charge of the molecule
+    real(dp) :: totalCharge
 
-    !> CPE
-    integer :: cpe = 3
+  end type TCpeInp
 
-  end type THamiltonianTypesEnum
+end module dftbp_cpeinp
 
-  !> Actual values for hamiltonianTypes.
-  type(THamiltonianTypesEnum), parameter :: hamiltonianTypes = THamiltonianTypesEnum()
-
-end module dftbp_hamiltoniantypes

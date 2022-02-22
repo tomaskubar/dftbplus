@@ -41,6 +41,7 @@ module dftbp_inputdata
 #:endif
   use poisson_init
   use dftbp_machinelearning
+  use dftbp_cpeinp
 
   implicit none
   private
@@ -527,6 +528,9 @@ module dftbp_inputdata
 
     !> Correction based on machine learning
     type(TMachineLearningInp), allocatable :: machineLearningInp
+
+    !> CPE input
+    type(TCpeInp) :: cpeInp
 
   end type TControl
 

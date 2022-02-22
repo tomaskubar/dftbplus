@@ -171,6 +171,13 @@ contains
     integer :: iDet
     logical :: isUnReduced
 
+    ! chemical potential equilibration
+    if (this%hamiltonianType == hamiltonianTypes%cpe) then
+      call this%cpe%setup(this%nAtom, this%species, this%coord)
+      call this%cpe%calculate()
+      return
+    end if
+
     call initGeoOptParameters(this%tCoordOpt, this%nGeoSteps, tGeomEnd, tCoordStep, tStopDriver,&
         & iGeoStep, iLatGeoStep)
 
@@ -640,6 +647,8 @@ contains
     case(hamiltonianTypes%xtb)
       ! TODO
       call error("xTB calculation currently not supported")
+    case(hamiltonianTypes%cpe)
+      ! nothing to do here
     end select
     call env%globalTimer%stopTimer(globalTimers%sparseH0S)
 

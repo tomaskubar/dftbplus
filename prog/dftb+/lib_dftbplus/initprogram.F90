@@ -116,6 +116,9 @@ module dftbp_initprogram
   use dftbp_transportio
   use dftbp_determinants
   use dftbp_machinelearning
+  use dftbp_cpeinp
+  use dftbp_cpecalc
+  
   implicit none
 
 #:if not WITH_TRANSPORT
@@ -1041,6 +1044,9 @@ module dftbp_initprogram
 
     !> Correction based on machine learning
     type(TMachineLearning), allocatable :: machineLearning
+    
+    !> chemical potential equilibration (CPE)
+    type(TCpeCalc), allocatable :: cpe
 
   contains
 
@@ -1271,6 +1277,13 @@ contains
     case(hamiltonianTypes%xtb)
       ! TODO
       call error("xTB calculation currently not supported")
+    case(hamiltonianTypes%cpe)
+      ! do whatever is needed for CPE and then quit the subroutine immediately
+      allocate(this%cpe)
+      call this%cpe%init(this%nType, input%ctrl%cpeInp, nAtom=this%nAtom,&
+          & species=input%geom%species, speciesName=input%geom%speciesNames,&
+          & coord=input%geom%coords)
+      return
     end select
     this%nOrb = this%orb%nOrb
     this%tPeriodic = input%geom%tPeriodic
@@ -1410,6 +1423,8 @@ contains
     case(hamiltonianTypes%xtb)
       ! TODO
       call error("xTB calculation currently not supported")
+    case(hamiltonianTypes%cpe)
+      ! nothing to do here
     end select
 
     ! Spin W's !'
@@ -1454,6 +1469,8 @@ contains
     case(hamiltonianTypes%xtb)
       ! TODO
       call error("xTB calculation currently not supported")
+    case(hamiltonianTypes%cpe)
+      ! nothing to do here
     end select
 
     ! Get species names and output file
@@ -1486,6 +1503,8 @@ contains
     case(hamiltonianTypes%xtb)
       ! TODO
       call error("xTB calculation currently not supported")
+    case(hamiltonianTypes%cpe)
+      ! nothing to do here
     end select
 
     if (allocated(input%ctrl%hubbU)) then
@@ -1800,6 +1819,8 @@ contains
     case(hamiltonianTypes%xtb)
       ! TODO
       call error("xTB calculation currently not supported")
+    case(hamiltonianTypes%cpe)
+      ! nothing to do here
     end select
 
     this%nrChrg = input%ctrl%nrChrg
@@ -4032,6 +4053,14 @@ contains
       call destruct(this%regionLabels)
     end if
 
+    ! chemical potential equilibration
+    if (allocated(this%cpe)) then
+      if (allocated(this%cpe%electronegativity)) deallocate(this%cpe%electronegativity)
+      if (allocated(this%cpe%hardness)) deallocate(this%cpe%hardness)
+      if (allocated(this%cpe%radius)) deallocate(this%cpe%radius)
+      deallocate(this%cpe)
+    end if
+
   end subroutine destructProgramVariables
 
 
@@ -5336,6 +5365,8 @@ contains
 
     case(hamiltonianTypes%xtb)
       call error("xTB calculation currently not supported for REKS")
+    case(hamiltonianTypes%cpe)
+      ! nothing to do here
     end select
 
   end subroutine TReksCalc_init

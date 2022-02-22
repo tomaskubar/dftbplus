@@ -1158,6 +1158,8 @@ contains
   #:else
       call readDFTBHam(node, ctrl, geo, slako, poisson)
   #:endif
+    case ("cpe")
+      call readCPEHam(node, ctrl, geo)
     case default
       call detailedError(node, "Invalid Hamiltonian")
     end select
@@ -1695,6 +1697,25 @@ contains
   end subroutine readDFTBHam
 
 
+  !> Reads CPE-Hamiltonian
+  subroutine readCPEHam(node, ctrl, geo)
+
+    !> Node to get the information from
+    type(fnode), pointer :: node
+
+    !> Control structure to be filled
+    type(TControl), intent(inout) :: ctrl
+
+    !> Geometry structure to be filled
+    type(TGeometry), intent(in) :: geo
+
+    ctrl%hamiltonian = hamiltonianTypes%cpe
+
+    call readElectronegativityAndHardness(node, ctrl, geo)
+
+  end subroutine readCPEHam
+
+
   !> Reads xTB-Hamiltonian
 #:if WITH_TRANSPORT
   subroutine readXTBHam(node, ctrl, geo, tp, greendens, poisson)
@@ -1936,6 +1957,48 @@ contains
     end do
 
   end subroutine readMaxAngularMomentum
+
+
+  !> Read in maximal angular momenta or selected shells
+  subroutine readElectronegativityAndHardness(node, ctrl, geo)
+
+    !> Node to get the information from
+    type(fnode), pointer :: node
+
+    !> Control structure to be filled
+    type(TControl), intent(inout) :: ctrl
+
+    !> Geometry structure to be filled
+    type(TGeometry), intent(in) :: geo
+
+    type(fnode), pointer :: child
+    integer :: iSp
+
+
+    call getChild(node, "Electronegativity", child, requested=.true.)
+    allocate(ctrl%cpeInp%electronegativity(geo%nSpecies))
+
+    do iSp = 1, geo%nSpecies
+      call getChildValue(child, geo%speciesNames(iSp), ctrl%cpeInp%electronegativity(iSp))
+    end do
+
+    call getChild(node, "Hardness", child, requested=.true.)
+    allocate(ctrl%cpeInp%hardness(geo%nSpecies))
+
+    do iSp = 1, geo%nSpecies
+      call getChildValue(child, geo%speciesNames(iSp), ctrl%cpeInp%hardness(iSp))
+    end do
+
+    call getChild(node, "Radius", child, requested=.true.)
+    allocate(ctrl%cpeInp%radius(geo%nSpecies))
+
+    do iSp = 1, geo%nSpecies
+      call getChildValue(child, geo%speciesNames(iSp), ctrl%cpeInp%radius(iSp))
+    end do
+
+    call getChildValue(node, "TotalCharge", ctrl%cpeInp%totalCharge, default=0._dp)
+
+  end subroutine readElectronegativityAndHardness
 
 
   !> Setup information about the orbitals of the species/atoms from angShell lists
