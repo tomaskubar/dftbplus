@@ -36,16 +36,16 @@ module dftbp_machinelearning
 
   contains
 
-    procedure :: init
-    procedure :: getEnergy
-    procedure :: addGradients
+    procedure :: init => TMachineLearning_init
+    procedure :: getEnergy => TMachineLearning_getEnergy
+    procedure :: addGradients => TMachineLearning_addGradients
 
   end type TMachineLearning
 
 contains
 
   !> Initialize with data from input
-  subroutine init(this, input, nAt, nSp, species)
+  subroutine TMachineLearning_init(this, input, nAt, nSp, species)
 
     !> instance
     class(TMachineLearning), intent(inout) :: this
@@ -75,10 +75,10 @@ contains
     ! store this information:
     ! atomic indices, atomic element/species, and symmetry function hyperparameters
 
-  end subroutine init
+  end subroutine TMachineLearning_init
 
   !> Get energy contributions from machine learning
-  function getEnergy(this, coords, img2CentCell) result(energy)
+  function TMachineLearning_getEnergy(this, coords, img2CentCell) result(energy)
 
     !> instance
     class(TMachineLearning), intent(inout) :: this
@@ -121,11 +121,11 @@ contains
 
     deallocate(energyAtom)
 
-  end function getEnergy
+  end function TMachineLearning_getEnergy
 
 
   !> Gradient contribution from machine learning
-  subroutine addGradients(this, derivs, img2CentCell)
+  subroutine TMachineLearning_addGradients(this, derivs, img2CentCell)
 
     !> instance
     class(TMachineLearning), intent(inout) :: this
@@ -171,7 +171,7 @@ contains
     deallocate(energyDerivsAtom)
     deallocate(derivsAdd)
 
-  end subroutine addGradients
+  end subroutine TMachineLearning_addGradients
 
 
 end module dftbp_machinelearning

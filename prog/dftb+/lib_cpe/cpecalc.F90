@@ -12,6 +12,7 @@ module dftbp_cpecalc
   use dftbp_accuracy
   use dftbp_assert
   use dftbp_lapackroutines
+  use dftbp_machinelearning
   use dftbp_message
   use dftbp_cpeinp
 
@@ -29,6 +30,9 @@ module dftbp_cpecalc
 
     !> Electronegativity per species, size (nSpecies)
     real(dp), allocatable :: electronegativity(:)
+
+    !> Electronegativity per species, size (nSpecies)
+    type(TMachineLearning), allocatable :: electronegativityML
 
     !> Chemical hardness per species, size (nSpecies)
     real(dp), allocatable :: hardness(:)
@@ -60,23 +64,23 @@ module dftbp_cpecalc
   contains
 
     !> Assign atom number, coordinates and species
-    procedure :: init
+    procedure :: init => TCpeCalc_init
 
     !> Assign atom number, coordinates and species
-    procedure :: setup
+    procedure :: setup => TCpeCalc_setup
 
     !> Run the actual calculation
-    procedure :: calculate
+    procedure :: calculate => TCpeCalc_calculate
 
     !> Evaluate the gamma matrix
-    procedure :: calcGamma
+    procedure :: calcGamma => TCpeCalc_calcGamma
 
   end type TCpeCalc
 
   contains
 
   !> Initialize CPE data from CPE input
-  subroutine init(this, nType, inp, nAtom, species, speciesName, coord)
+  subroutine TCpeCalc_init(this, nType, inp, nAtom, species, speciesName, coord)
     
     !> data type for CPE
     class(TCpeCalc), intent(inout) :: this
@@ -101,8 +105,16 @@ module dftbp_cpecalc
 
     this%nSpecies = nType
 
-    allocate(this%electronegativity(this%nSpecies))
-    this%electronegativity = inp%electronegativity
+    if (inp%tElectronegValues) then
+      allocate(this%electronegativity(this%nSpecies))
+      this%electronegativity = inp%electronegativity
+    end if
+
+    if (inp%tElectronegNeuralNet) then
+      allocate(this%electronegativityML)
+      call this%electronegativityML%sf%init(inp%electronegativityML%sf, nAtom, this%nSpecies)
+      call this%electronegativityML%nn%init(inp%electronegativityML%nn, species)
+    end if
 
     allocate(this%hardness(this%nSpecies))
     this%hardness = inp%hardness
@@ -131,10 +143,10 @@ module dftbp_cpecalc
       this%moleculeIsKnown = .false.
     end if
 
-  end subroutine init
+  end subroutine TCpeCalc_init
 
   !> Set up CPE calculation from information about the system
-  subroutine setup(this, nAtom, species, coord)
+  subroutine TCpeCalc_setup(this, nAtom, species, coord)
     
     !> data type for CPE
     class(TCpeCalc), intent(inout) :: this
@@ -166,10 +178,10 @@ module dftbp_cpecalc
       this%moleculeIsKnown = .true.
     end if
 
-  end subroutine setup
+  end subroutine TCpeCalc_setup
 
   !> Carry out the CPE calculation
-  subroutine calculate(this)
+  subroutine TCpeCalc_calculate(this)
     
     !> data type for CPE
     class(TCpeCalc), intent(inout) :: this
@@ -193,7 +205,11 @@ module dftbp_cpecalc
 
     allocate(atomElectronegativity(this%nAtom+1, 1))
     do iAt=1, this%nAtom
-      atomElectronegativity(iAt, 1) = - this%electronegativity(this%species(iAt))
+      if (allocated(this%electronegativity)) then
+        atomElectronegativity(iAt, 1) = - this%electronegativity(this%species(iAt))
+      else
+        call error("CPE: implementation of electronegativityML not ready yet!")
+      end if
     end do
     atomElectronegativity(this%nAtom+1, 1) = this%totalCharge
     write (*,*) "atom electronegativities"
@@ -215,9 +231,9 @@ module dftbp_cpecalc
     write (*,*) "resulting charges"
     write (*,'(F8.4)') this%charge
 
-  end subroutine calculate
+  end subroutine TCpeCalc_calculate
 
-  subroutine calcGamma(this, gammaMat)
+  subroutine TCpeCalc_calcGamma(this, gammaMat)
 
     !> data type for CPE
     class(TCpeCalc), intent(inout) :: this
@@ -250,7 +266,7 @@ module dftbp_cpecalc
     end do
     gammaMat(this%nAtom+1, this%nAtom+1) = 0._dp
 
-  end subroutine calcGamma
+  end subroutine TCpeCalc_calcGamma
 
 ! function calcGammaValue(hard1, hard2, distance)
 !   !> chemical hardness of both atoms

@@ -1959,7 +1959,8 @@ contains
   end subroutine readMaxAngularMomentum
 
 
-  !> Read in maximal angular momenta or selected shells
+  !> Read in electronegativity (either numerical values, or information on neural nets that will
+  !>   yield the values) and chemical hardness values
   subroutine readElectronegativityAndHardness(node, ctrl, geo)
 
     !> Node to get the information from
@@ -1971,16 +1972,63 @@ contains
     !> Geometry structure to be filled
     type(TGeometry), intent(in) :: geo
 
-    type(fnode), pointer :: child
+    type(fnode), pointer :: child, value1
     integer :: iSp
 
 
-    call getChild(node, "Electronegativity", child, requested=.true.)
-    allocate(ctrl%cpeInp%electronegativity(geo%nSpecies))
+    call getChildValue(node, "ElectronegativityValues", value1, "", child=child, &
+        & allowEmptyValue=.true., dummyValue=.true.)
+    if (associated(value1)) then
+      ctrl%cpeInp%tElectronegValues = .true.
+      allocate(ctrl%cpeInp%electronegativity(geo%nSpecies))
+      do iSp = 1, geo%nSpecies
+        call getChildValue(child, geo%speciesNames(iSp), ctrl%cpeInp%electronegativity(iSp))
+      end do
+    else
+      ctrl%cpeInp%tElectronegValues = .false.
+    end if
 
-    do iSp = 1, geo%nSpecies
-      call getChildValue(child, geo%speciesNames(iSp), ctrl%cpeInp%electronegativity(iSp))
-    end do
+    call getChildValue(node, "ElectronegativityNeuralNet", value1, "", child=child, &
+        & allowEmptyValue=.true., dummyValue=.true.)
+    if (associated(value1)) then
+      ctrl%cpeInp%tElectronegNeuralNet = .true.
+    ! allocate(ctrl%cpeInp%electronegativityNN)
+    ! allocate(ctrl%cpeInp%electronegativitySF)
+      allocate(ctrl%cpeInp%electronegativityML)
+      allocate(ctrl%cpeInp%electronegativityML%nn)
+      allocate(ctrl%cpeInp%electronegativityML%sf)
+    ! call readMachineLearning(child, geo, ctrl%machineLearningInp)
+      call readNeuralNet(child, geo, ctrl%cpeInp%electronegativityML%nn, ctrl%cpeInp%electronegativityML%sf)
+      call testNeuralNetInp(ctrl%cpeInp%electronegativityML%nn, ctrl%cpeInp%electronegativityML%sf)
+    else
+      ctrl%cpeInp%tElectronegNeuralNet = .false.
+    end if
+
+  ! type(fnode), pointer :: machLearnModel
+  ! type(string) :: buffer
+
+  ! call getChildValue(child, "", machLearnModel)
+  ! call getNodeName(machLearnModel, buffer)
+  ! select case (char(buffer))
+  ! case ("neuralnet")
+  !   allocate(input%nn)
+  !   allocate(input%sf)
+  !   call readNeuralNet(machLearnModel, geo, input%nn, input%sf)
+  ! case default
+  !   call detailedError(node, "Invalid machine learning model name " // char(buffer))
+  ! end select
+
+  ! call testNeuralNetInp(input%nn, input%sf)
+
+    if (.not. ctrl%cpeInp%tElectronegNeuralNet .and. .not. ctrl%cpeInp%tElectronegValues) then
+      call error("Electronegativity has to be given as values or neural net; neither was found.")
+    end if
+
+    if (ctrl%cpeInp%tElectronegNeuralNet .and. ctrl%cpeInp%tElectronegValues) then
+      write (stdout, *) 'Electronegativity was given as both values and neural net.'
+      write (stdout, *) '  values will be ignored; neural net will be used.'
+      ctrl%cpeInp%tElectronegValues = .false.
+    end if
 
     call getChild(node, "Hardness", child, requested=.true.)
     allocate(ctrl%cpeInp%hardness(geo%nSpecies))

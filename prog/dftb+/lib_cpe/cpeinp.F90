@@ -10,6 +10,9 @@
 module dftbp_cpeinp
 
   use dftbp_accuracy
+  use dftbp_machinelearning
+! use dftbp_machinelearning_sf
+! use dftbp_machinelearning_nn
 
   implicit none
 
@@ -20,8 +23,23 @@ module dftbp_cpeinp
   !> Data type for initial values for CPE
   type :: TCpeInp
 
-    !> Electronegativity per species
+    !> Electronegativity is given simply by numerical values
+    logical :: tElectronegValues
+
+    !> Electronegativity values per species
     real(dp), allocatable :: electronegativity(:)
+
+    !> Electronegativity is represented by neural nets
+    logical :: tElectronegNeuralNet
+
+  ! !> Symmetry function related data
+  ! type(TMLSymmetryFunctionsInp), allocatable :: electronegativitySF
+
+  ! !> Neural network related data
+  ! type(TMLNeuralNetInp), allocatable :: electronegativityNN
+
+    !> Neural net and symmetry function data for calculation of electronegativities
+    type(TMachineLearningInp), allocatable :: electronegativityML
 
     !> Chemical hardness per species
     real(dp), allocatable :: hardness(:)
