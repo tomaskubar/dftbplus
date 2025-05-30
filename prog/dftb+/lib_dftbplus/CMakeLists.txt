@@ -4,6 +4,7 @@ set(sources-fpp
   ${curdir}/eigenvects.F90
   ${curdir}/elstattypes.F90
   ${curdir}/fmo.F90
+  ${curdir}/fmogradient.F90
   ${curdir}/forcetypes.F90
   ${curdir}/hsdhelpers.F90
   ${curdir}/initprogram.F90

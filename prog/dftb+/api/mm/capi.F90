@@ -569,6 +569,32 @@ contains
   end subroutine c_DftbPlus_checkInvertPhase
 
 
+  !> Obtain the gradients due to FMO orbitals
+  subroutine c_DftbPlus_getFmoGradients(handler, filling, gradients)&
+      & bind(C, name='dftbp_get_fmo_gradients')
+
+    !> handler for the calculation
+    type(c_DftbPlus), intent(inout) :: handler
+
+    !> filling of the orbitals
+    !> typically, one of the orbitals has 1, and the others have 0
+    real(c_double), intent(in) :: filling(*)
+
+    !> gradients, row major format
+    real(c_double), intent(out) :: gradients(3, *)
+
+    type(TDftbPlusC), pointer :: instance
+    integer :: nAtom, nOrb
+
+    call c_f_pointer(handler%instance, instance)
+    nAtom = instance%nrOfAtoms()
+    nOrb = instance%nrOfOrbitals()
+    call instance%getFmoGradients(filling(1:nOrb), gradients(:, 1:nAtom))
+    write (*, '(3F12.7)') gradients(:, 1:nAtom)
+
+  end subroutine c_DftbPlus_getFmoGradients
+
+
   !> Obtain the pointers to DFTB+ data (phase 1 of the FMO calculation)
   subroutine c_DftbPlus_getPointersToPhase1(handler, ptrsPhase1)&
       & bind(C, name='dftbp_get_pointers_phase1')

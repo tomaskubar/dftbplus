@@ -26,6 +26,7 @@ module dftbp_mmapi
   use dftbp_charmanip, only : newline
   use dftbp_initprogram, only: TDftbPlusMain
   use dftbp_fmo, only : TPointersToPhase1, checkInvertPhase
+  use dftbp_fmogradient, only : fmoGradients
   use dftbp_sparse2dense, only : unpackHS
   implicit none
   private
@@ -118,6 +119,8 @@ module dftbp_mmapi
     procedure :: getHamilOverl => TDftbPlus_getHamilOverl
     !> check and possibly invert the phase of frontier orbitals
     procedure :: checkInvertPhase => TDftbPlus_checkInvertPhase
+    !> obtain the DFTB+ gradients due to FMO orbital/s
+    procedure :: getFmoGradients => TDftbPlus_getFmoGradients
     !> get pointers to phase 1 of the DFTB-FMO calculation
     procedure :: getPointersToPhase1 => TDftbPlus_getPointersToPhase1
     !> init pointers to phase 1 of the DFTB-FMO calculation
@@ -788,6 +791,31 @@ contains
         & this%main%frontierOverlap)
 
   end subroutine TDftbPlus_checkInvertPhase
+
+
+  !> Returns the gradient due to FMO orbital/s
+  subroutine TDftbPlus_getFmoGradients(this, filling, gradients)
+
+    !> Instance.
+    class(TDftbPlus), intent(inout) :: this
+
+    !> Filling of the orbitals (typically, one of the orbitals has 1, and the others have 0)
+    real(dp), intent(in) :: filling(:)
+
+    !> Gradients on the atoms.
+    real(dp), intent(out) :: gradients(:,:)
+
+    call this%checkInit()
+
+    call fmoGradients(this%env, this%main%sccCalc, this%main%nonSccDeriv,&
+        & this%main%eigVecsReal(:,:,1), this%main%eigen(:,1,1), filling, this%main%qOutput,&
+        & this%main%q0, this%main%skHamCont, this%main%skOverCont, this%main%neighbourList,&
+        & this%main%nNeighbourSK, this%main%species, this%main%img2CentCell, this%main%orb,&
+        & this%main%potential, this%main%coord, this%main%thirdOrd, this%main%qDepExtPot,&
+        & this%main%rangeSep, this%main%SSqrReal, this%main%over, this%main%denseDesc,&
+        & this%main%iSparseStart, this%main%deltaRhoOutSqr, gradients)
+
+  end subroutine TDftbPlus_getFmoGradients
 
 
   !> This is called before after finishing the phase 2 of the FMO calculation:
