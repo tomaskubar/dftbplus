@@ -174,7 +174,7 @@ contains
       write(stdErr0, "(A,I0,A)") "Process ", globalMpiComm%rank, " could not be aborted."
     end if
   #:endif
-    stop
+    error stop errorCode0
 
   end subroutine abortProgram
 
