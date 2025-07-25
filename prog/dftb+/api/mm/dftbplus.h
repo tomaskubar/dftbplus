@@ -308,6 +308,27 @@ void dftbp_get_gross_charges(DftbPlus *instance, double *charges);
  */
 void dftbp_get_charge_derivatives(DftbPlus *instance, double *dQdX, double *dQdXext);
 
+
+/**
+ * Runs a calculation of derivatives of atomic gross charges with respect to coordinates of atoms.
+ *   With QM/MM, also derivatives w.r.t. coordinates of external point charges are calculated,
+ *   where only the external point charges from the list extChrgWRT are considered.
+ *
+ * \param[inout] instance Handler of the DFTB+ instance.
+ *
+ * \param[out] dQdX Derivatives w.r.t. atom coordinates.  Shape [natom, 3, natom].
+ *
+ * \param[out] dQdXext Derivatives w.r.t. external point charges.  Shape [natom, 3, nextcharge].
+ *
+ * \param[in] nExtChrgWRT Number of external point charges to calculate derivatives w.r.t.
+ *
+ * \param[in] extChrgWRT List of indexes of these external point charges.  Shape [nExtChrgWRT].
+ *
+ * Sign convention: Electron has negative charge.
+ */
+void dftbp_get_charge_derivatives_select(DftbPlus *instance, double *dQdX, double *dQdXext,
+                                    const int *nExtChrgWRT, const int *extChrgWRT);
+
 #ifdef __cplusplus
 }
 #endif

@@ -59,7 +59,7 @@ contains
       & sccCalc, maxSccIter, sccTol, nMixElements, nIneqMixElements, iEqOrbitals, tempElec, Ef,&
       & tFixEf, spinW, thirdOrd, dftbU, iEqBlockDftbu, onsMEs, iEqBlockOnSite, rangeSep,&
       & nNeighbourLC, pChrgMixer, taggedWriter, tWriteAutoTest, autoTestTagFile, tWriteTaggedOut,&
-      & taggedResultsFile, tMulliken, dQdXext)
+      & taggedResultsFile, tMulliken, dQdXext, nExtChrgWRT, extChrgWRT)
       
     !> Environment settings
     type(TEnvironment), intent(inout) :: env
@@ -192,7 +192,16 @@ contains
     !> Output, charge derivatives
     real(dp), allocatable, intent(inout) :: dQdXext(:,:,:)
 
-    integer :: iS, iK, iKS, iExtchg, iCart, iLev, iSh, iSp, jAt ! iAt, jCart 
+    !> number of MM atoms for which the derivatives of atomic charges w.r.t. coordinates of those
+    !>   MM atoms shall be calculated
+    integer, intent(in) :: nExtChrgWRT
+
+    !> list of MM atoms for which the derivatives of atomic charges w.r.t. coordinates of those MM
+    !>   atoms shall be calculated
+    integer, intent(in), allocatable :: extChrgWRT(:)
+
+
+    integer :: iS, iK, iKS, iExtChrgWRT, iCart, iLev, iSh, iSp, jAt ! iAt, jCart
 
     integer :: nSpin, nKpts, nOrbs, nIndepHam
 
@@ -213,7 +222,7 @@ contains
 
     real(dp) :: dRho(size(over),size(ham, dim=2))
     real(dp) :: dqIn(orb%mOrb,nAtom,size(ham, dim=2))
-    real(dp), allocatable :: dqOut(:,:,:,:,:) !(orb%mOrb, nAtom, size(ham, dim=2), 3, nExtCharge)
+    real(dp), allocatable :: dqOut(:,:,:,:,:) !(orb%mOrb, nAtom, size(ham, dim=2), 3, nExtChrgWRT)
     real(dp) :: dqInpRed(nMixElements), dqOutRed(nMixElements)
     real(dp) :: dqDiffRed(nMixElements), sccErrorQ
     real(dp) :: dqPerShell(orb%mShell,nAtom,size(ham, dim=2))
@@ -255,13 +264,17 @@ contains
       write (*,*) "No MM atoms, nothing to do in dPsidxQMMM."
       return
     end if
+    if (nExtChrgWRT <= 0) then
+      write (*,*) "No MM atoms to calculate derivatives, nothing to do in dPsidxQMMM."
+      return
+    end if
   ! write (*,*) "EXTERNAL CHARGES: NUMBER = ", nExtCharge
   ! do iExtchg=1, nExtcharge
   !   write (*,'(4F10.5)') extCoord(:,iExtchg) / AA__Bohr, extCharge(iExtchg)
   ! end do
 
     ! allocate the array/s that need to know the number of ext. charges
-    allocate(dqOut(orb%mOrb, nAtom, size(ham, dim=2), 3, nExtCharge))
+    allocate(dqOut(orb%mOrb, nAtom, size(ham, dim=2), 3, nExtChrgWRT))
 
     if (tFixEf) then
       call error("Perturbation expressions not currently implemented for fixed Fermi energy")
@@ -286,7 +299,7 @@ contains
     nOrbs = size(filling,dim=1)
     nKpts = size(filling,dim=2)
 
-    allocate(dEi(nOrbs, nExtCharge, nSpin, 3))
+    allocate(dEi(nOrbs, nExtChrgWRT, nSpin, 3))
 
     allocate(dHam(size(ham,dim=1),nSpin))
 
@@ -375,18 +388,18 @@ contains
   ! call calcInvRPrimeQMMM(nAtom, nExtCharge, coord, extCoord, extCharge, dgammaQMMM)
 
     ! Displaced MM atom to differentiate wrt
-    lpAtom: do iExtchg = 1, nExtCharge
+    lpAtom: do iExtChrgWRT = 1, nExtChrgWRT
 
       ! any non-variational QM/MM contribution?
 
-      call calcInvRPrimeAsymm(nAtom, coord, nExtCharge, extCoord, extCharge, iExtchg,&
-          & dgammaQMMM, tDerivWrtExtCharges=.true.)
+      call calcInvRPrimeAsymm(nAtom, coord, nExtCharge, extCoord, extCharge,&
+          & extChrgWRT(iExtChrgWRT), dgammaQMMM, tDerivWrtExtCharges=.true.)
 
       ! perturbation direction
       lpCart: do iCart = 1, 3
 
       ! write (stdOut,*) 'Calculating derivative for displacement along ',&
-      !     & trim(direction(iCart)),' for MM charge number', iExtchg
+      !     & trim(direction(iCart)),' for MM charge number', extChrgWRT(iExtChrgWRT)
 
         if (tSccCalc) then
           sOmega(:,:) = 0.0_dp
@@ -514,7 +527,7 @@ contains
                 & img2CentCell, denseDesc, iKS, parallelKS, nFilled(:,1), nEmpty(:,1),&
                 & eigVecsReal, eigVals, Ef, tempElec, orb, dRho(:,iS), iCart, dRhoOutSqr,&
                 & rangeSep, over, nNeighbourLC, tMetallic, filling / maxFill, dEi,&
-                & dPsiReal, iExtchg)
+                & dPsiReal, iExtChrgWRT)
           end do
 
           dRho(:,:) = maxFill * dRho
@@ -523,9 +536,9 @@ contains
           end if
           call ud2qm(dRho)
 
-          dqOut(:, :, :, iCart, iExtchg) = 0.0_dp
+          dqOut(:, :, :, iCart, iExtChrgWRT) = 0.0_dp
           do iS = 1, nSpin
-            call mulliken(dqOut(:, :, iS, iCart, iExtchg), over, dRho(:,iS), orb,&
+            call mulliken(dqOut(:, :, iS, iCart, iExtChrgWRT), over, dRho(:,iS), orb,&
                 & neighbourList%iNeighbour, nNeighbourSK, img2CentCell, iSparseStart)
             if (allocated(dftbU) .or. allocated(onsMEs)) then
               dqBlockOut(:,:,:,iS) = 0.0_dp
@@ -540,7 +553,7 @@ contains
               dqDiffRed(:) = dRhoOut - dRhoIn
             else
               dqOutRed = 0.0_dp
-              call OrbitalEquiv_reduce(dqOut(:, :, :, iCart, iExtchg), iEqOrbitals, orb,&
+              call OrbitalEquiv_reduce(dqOut(:, :, :, iCart, iExtChrgWRT), iEqOrbitals, orb,&
                   & dqOutRed(:nIneqMixElements))
               if (allocated(dftbU)) then
                 call appendBlockReduced(dqBlockOut, iEqBlockDFTBU, orb, dqOutRed)
@@ -561,7 +574,7 @@ contains
                   dRhoIn(:) = dRhoOut
                   call denseMulliken(dRhoInSqr, SSqrReal, denseDesc%iAtomStart, dqIn)
                 else
-                  dqIn(:,:,:) = dqOut(:, :, :, iCart, iExtchg)
+                  dqIn(:,:,:) = dqOut(:, :, :, iCart, iExtChrgWRT)
                   dqInpRed(:) = dqOutRed(:)
                   if (allocated(dftbU) .or. allocated(onsMEs)) then
                     dqBlockIn(:,:,:,:) = dqBlockOut(:,:,:,:)
@@ -641,8 +654,8 @@ contains
   ! do iCart = 1, 3
   !   write (stdOut, *) iCart
   !   do iS = 1, nSpin
-  !     do iExtchg = 1, nExtCharge
-  !       write (stdOut, *) dEi(:, iExtchg, iS, iCart) ! * Hartree__eV
+  !     do iExtChrgWRT = 1, nExtChrgWRT
+  !       write (stdOut, *) dEi(:, iExtChrgWRT, iS, iCart) ! * Hartree__eV
   !     end do
   !   end do
   ! end do
@@ -650,11 +663,11 @@ contains
     if (tMulliken .or. tSccCalc) then
       write (stdOut, *)
       write (stdOut, *) 'Charge derivatives'
-      do iExtchg = 1, nExtCharge
-        write (stdOut,"(A,I0)") '/d MMcharge_', iExtchg
+      do iExtChrgWRT = 1, nExtChrgWRT
+        write (stdOut,"(A,I0)") '/d MMcharge_', extChrgWRT(iExtChrgWRT)
         do iS = 1, nSpin
           do jAt = 1, nAtom
-            write (stdOut, '(I3,3F11.6)') jAt, -sum(dqOut(:, jAt, iS, :, iExtchg), dim=1)
+            write (stdOut, '(I3,3F11.6)') jAt, -sum(dqOut(:, jAt, iS, :, iExtChrgWRT), dim=1)
           end do
           write (stdOut, *)
         end do
@@ -664,10 +677,10 @@ contains
       ! save output -- spin channel 1
       @:ASSERT(size(dQdXext, dim=1) == nAtom)
       @:ASSERT(size(dQdXext, dim=2) == 3)
-      @:ASSERT(size(dQdXext, dim=3) == nExtCharge)
-      do iExtChg = 1, nExtCharge
+      @:ASSERT(size(dQdXext, dim=3) == nExtChrgWRT)
+      do iExtChrgWRT = 1, nExtChrgWRT
         do iCart = 1, 3
-          dQdXext(:, iCart, iExtChg) = sum(dqOut(:, :, 1, iCart, iExtChg), dim=1)
+          dQdXext(:, iCart, iExtChrgWRT) = sum(dqOut(:, :, 1, iCart, iExtChrgWRT), dim=1)
         end do
       end do
 
@@ -710,7 +723,7 @@ contains
   subroutine dRhoRealQMMM(env, dHam, neighbourList, nNeighbourSK, iSparseStart, img2CentCell,&
       & denseDesc, iKS, parallelKS, nFilled, nEmpty, eigVecsReal, eigVals, Ef, tempElec, orb,&
       & dRhoSparse, iCart, dRhoSqr, rangeSep, over, nNeighbourLC, tMetallic, filling, dEi, dPsi,&
-      & iExtchg)
+      & iExtChrgWRT)
 
     !> Environment settings
     type(TEnvironment), intent(inout) :: env
@@ -791,8 +804,8 @@ contains
     !> Optional derivatives of single particle wavefunctions
     real(dp), allocatable, intent(inout) :: dPsi(:,:,:,:)
 
-    !> Ext. charge with which the the derivative is being calculated
-    integer, intent(in) :: iExtchg
+    !> Ext. charge with respect to which the derivative is being calculated
+    integer, intent(in) :: iExtChrgWRT
 
     integer :: ii, iFilled, iEmpty, iS, iK, nOrb
     real(dp) :: workLocal(size(eigVecsReal,dim=1), size(eigVecsReal,dim=2))
@@ -811,7 +824,7 @@ contains
 
     call transform%init()
 
-    dEi(:, iExtchg, iS, iCart) = 0.0_dp
+    dEi(:, iExtChrgWRT, iS, iCart) = 0.0_dp
     if (allocated(dPsi)) then
       dPsi(:, :, iS, iCart) = 0.0_dp
     end if
@@ -847,12 +860,12 @@ contains
 
     ! diagonal elements of workLocal are now derivatives of eigenvalues
     do ii = 1, nOrb
-      dEi(ii, iExtchg, iS, iCart) = workLocal(ii, ii)
+      dEi(ii, iExtChrgWRT, iS, iCart) = workLocal(ii, ii)
     end do
 
     if (tMetallic(iS)) then
-      call dEida(dFilling, filling(:,iK,iS), dEi(:,iExtchg, iS, iCart), tempElec)
-      !write(stdOut,*)'dEf', dEfda(filling(:,iK,iS), dEi(:,iExtchg, iS, iCart))
+      call dEida(dFilling, filling(:,iK,iS), dEi(:,iExtChrgWRT, iS, iCart), tempElec)
+      !write(stdOut,*)'dEf', dEfda(filling(:,iK,iS), dEi(:,iExtChrgWRT, iS, iCart))
       !write(stdOut,*)dFilling
     end if
 

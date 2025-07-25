@@ -1289,7 +1289,7 @@ contains
 
 
   !> Process current geometry
-  subroutine processChargeDerivatives(env, this)
+  subroutine processChargeDerivatives(env, this, nExtChrgWRT, extChrgWRT)
 
     !> Environment settings
     type(TEnvironment), intent(inout) :: env
@@ -1297,7 +1297,22 @@ contains
     !> Global variables
     type(TDftbPlusMain), intent(inout) :: this
 
-    call env%globalTimer%startTimer(globalTimers%perturb)
+    !> number of MM atoms for whith the derivatives of atomic charges w.r.t. coordinates of those
+    !>   MM atoms shall be calculated
+    integer, intent(in), optional :: nExtChrgWRT
+
+    !> list of MM atoms for whith the derivatives of atomic charges w.r.t. coordinates of those MM
+    !>   atoms shall be calculated
+    integer, intent(in), optional :: extChrgWRT(:)
+
+    integer :: iExtChrgWRT
+    logical :: doPsidxQMMM
+
+    if (present(nExtChrgWRT)) then
+      write (stdOut,*) "nExtChrgWRT is present and set to ", nExtChrgWRT
+    else
+      write (stdOut,*) "nExtChrgWRT is not present"
+    end if
 
     call env%globalTimer%startTimer(globalTimers%perturbQM)
     if (allocated(this%dQdX)) then
@@ -1316,12 +1331,43 @@ contains
         & this%tWriteResultsTag, resultsTag, this%tMulliken, this%dQdX)
     call env%globalTimer%stopTimer(globalTimers%perturbQM)
 
+    doPsidxQMMM = .false.
     if (this%nExtChrg > 0) then
+      if (present(nExtChrgWRT)) then
+        if (nExtChrgWRT > 0) then
+          doPsidxQMMM = .true.
+        end if
+      else
+        doPsidxQMMM = .true.
+      end if
+    end if
+
+    if (doPsidxQMMM) then
       call env%globalTimer%startTimer(globalTimers%perturbMM)
       if (allocated(this%dQdXext)) then
         deallocate(this%dQdXext)
       end if
-      allocate(this%dQdXext(this%nAtom, 3, this%nExtChrg))
+      if (allocated(this%extChrgWRT)) then
+        deallocate(this%extChrgWRT)
+      end if
+
+      if (present(nExtChrgWRT)) then
+        ! copy the list of MM atoms (to calculate derivatives with respect to) to main structure
+        this%nExtChrgWRT = nExtChrgWRT
+        allocate(this%extChrgWRT(this%nExtChrgWRT))
+        ! change from C to Fortran indexing
+        this%extChrgWRT(:) = extChrgWRT(:) + 1
+      else
+        ! create the main structure (list of MM atoms to calculate derivatives with respect to)
+        !   containing all of the MM atoms (DEFAULT if the list is not provided)
+        this%nExtChrgWRT = this%nExtChrg
+        allocate(this%extChrgWRT(this%nExtChrgWRT))
+        do iExtChrgWRT = 1, this%nExtChrgWRT
+          this%extChrgWRT(iExtChrgWRT) = iExtChrgWRT
+        end do
+      end if
+
+      allocate(this%dQdXext(this%nAtom, 3, this%nExtChrgWRT))
       call dPsidxQMMM(env, this%parallelKS, this%filling, this%eigen, this%eigVecsReal,&
           & this%qOutput, this%q0, this%ham, this%over, this%orb, this%nAtom, this%species,&
           & this%neighbourList, this%nNeighbourSK, this%denseDesc, this%iSparseStart,&
@@ -1330,7 +1376,8 @@ contains
           & this%tFixEf, this%spinW, this%thirdOrd, this%dftbU, this%iEqBlockDftbu,&
           & this%onSiteElements, this%iEqBlockOnSite, this%rangeSep, this%nNeighbourLC,&
           & this%pChrgMixer, this%taggedWriter, this%tWriteAutotest, autotestTag,&
-          & this%tWriteResultsTag, resultsTag, this%tMulliken, this%dQdXext)
+          & this%tWriteResultsTag, resultsTag, this%tMulliken, this%dQdXext, this%nExtChrgWRT,&
+          & this%extChrgWRT)
       call env%globalTimer%stopTimer(globalTimers%perturbMM)
     end if
 
@@ -1355,10 +1402,12 @@ contains
 
     call env%globalTimer%stopTimer(globalTimers%perturb)
 
-    if (this%nExtChrg > 0) then
-      call writeDetailedOut4a(this%fdDetailedOut, this%dQdX, this%dQdXext)
-    else
-      call writeDetailedOut4a(this%fdDetailedOut, this%dQdX)
+    if (this%tWriteDetailedOut) then
+      if (this%nExtChrg > 0) then
+        call writeDetailedOut4a(this%fdDetailedOut, this%dQdX, this%dQdXext)
+      else
+        call writeDetailedOut4a(this%fdDetailedOut, this%dQdX)
+      end if
     end if
 
   end subroutine processChargeDerivatives

@@ -10,6 +10,7 @@ module dftbp_capi
   use, intrinsic :: iso_c_binding
   use, intrinsic :: iso_fortran_env
   use dftbp_accuracy, only : dp
+  use dftbp_globalenv, only : stdOut
   use dftbp_linkedlist
   use dftbp_mmapi, only :&
       & TDftbPlus, TDftbPlus_init, TDftbPlus_destruct, TDftbPlusInput, TDftbPlusAtomList
@@ -511,6 +512,48 @@ contains
     end if
 
   end subroutine c_DftbPlus_getChargeDerivatives
+
+
+  !> Obtain the gradients wrt DFTB atom positions
+  subroutine c_DftbPlus_getChargeDerivativesSelect(handler, dQdX, dQdXext, nExtChrgWRT, extChrgWRT)&
+      & bind(C, name='dftbp_get_charge_derivatives_select')
+
+    !> handler for the calculation
+    type(c_DftbPlus), intent(inout) :: handler
+
+    !> derivatives w.r.t. coords of atoms, row major format
+    type(c_ptr), value, intent(in) :: dQdX
+
+    !> derivatives w.r.t. coords of external point charges, row major format
+    type(c_ptr), value, intent(in) :: dQdXext
+
+    !> number of MM atoms to calculate the derivatives of charges w.r.t. coordinates of those MM
+    !>   atoms
+    integer(c_int), intent(in) :: nExtChrgWRT
+
+    !> list of MM atoms to calculate the derivatives of charges w.r.t. coordinates of those MM atoms
+    type(c_ptr), value, intent(in) :: extChrgWRT
+
+
+    type(TDftbPlusC), pointer :: instance
+    integer :: nAtom, nExtCharge, iExtChrgWRT
+    real(c_double), pointer :: ptr_dQdX(:,:,:), ptr_dQdXext(:,:,:)
+    integer(c_int), pointer :: ptr_extChrgWRT(:)
+
+    call c_f_pointer(handler%instance, instance)
+    nAtom = instance%nrOfAtoms()
+
+    call c_f_pointer(dQdX, ptr_dQdX, [3, nAtom, nAtom])
+    call c_f_pointer(dQdXext, ptr_dQdXext, [3, nExtChrgWRT, nAtom])
+    call c_f_pointer(extChrgWRT, ptr_extChrgWRT, [nExtChrgWRT])
+
+    write (stdOut, '(A,I5,A)') "getChargeDerivativesSelect with ", nExtChrgWRT, " MM atoms"
+    write (stdOut, *) "dQdXext is ", size(ptr_dQdXext)
+
+    call instance%getChargeDerivatives(ptr_dQdX, dQdXext=ptr_dQdXext, nExtChrgWRT=nExtChrgWRT,&
+        & extChrgWRT=ptr_extChrgWRT)
+
+  end subroutine c_DftbPlus_getChargeDerivativesSelect
 
 
   !> Converts a 0-char terminated C-type string into a Fortran string.

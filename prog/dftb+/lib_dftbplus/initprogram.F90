@@ -1047,6 +1047,14 @@ module dftbp_initprogram
     !> derivatives of atomic charges w.r.t. coordinates of MM atoms
     real(dp), allocatable :: dQdXext(:,:,:)
 
+    !> number of MM atoms for whith the derivatives of atomic charges w.r.t. coordinates of those
+    !>   MM atoms shall be calculated
+    integer :: nExtChrgWRT
+
+    !> list of MM atoms for whith the derivatives of atomic charges w.r.t. coordinates of those MM
+    !>   atoms shall be calculated
+    integer, allocatable :: extChrgWRT(:)
+
   contains
 
     procedure :: initProgramVariables

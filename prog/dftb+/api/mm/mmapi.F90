@@ -700,7 +700,7 @@ contains
   !> Derivatives of atomic charges w.r.t. coordinates of atoms,
   !>   and optionally, w.r.t. coordinates of external point charges
   !>
-  subroutine TDftbPlus_getChargeDerivatives(this, dQdX, dQdXext)
+  subroutine TDftbPlus_getChargeDerivatives(this, dQdX, dQdXext, nExtChrgWRT, extChrgWRT)
 
     !> Instance
     class(TDftbPlus), intent(inout) :: this
@@ -711,10 +711,29 @@ contains
     !> Output: charge derivatives w.r.t. coordinates of external point charges
     real(dp), optional, intent(out) :: dQdXext(:,:,:)
 
+    !> Number of MM atoms to calculate the derivatives of charges w.r.t. coordinates of those MM
+    !>   atoms
+    integer, optional, intent(in) :: nExtChrgWRT
 
-    if (present(dQdXext)) then
-      call getChargeDerivatives(this%env, this%main, dQdX, dQdXext)
+    !> List of MM atoms to calculate the derivatives of charges w.r.t. coordinates of those MM atoms
+    integer, optional, intent(in) :: extChrgWRT(:)
+
+
+    write (stdOut, *) "mmapi: getChargeDerivatives with ", nExtChrgWRT, " MM atoms"
+
+    if (present(nExtChrgWRT)) then
+      if (present(dQdXext)) then
+        write (stdOut, *) "mmapi: case 1"
+        call getChargeDerivatives(this%env, this%main, dQdX, dQdXext, nExtChrgWRT, extChrgWRT)
+      else
+        write (stdOut, *) "mmapi: case 2"
+        if (nExtChrgWRT > 0) then
+          call error('getChargeDerivatives: called with nExtChrgWRT > 0 but dQdXext not given!')
+        end if
+        call getChargeDerivatives(this%env, this%main, dQdX, nExtChrgWRT=0)
+      end if
     else
+      write (stdOut, *) "mmapi: case 3"
       call getChargeDerivatives(this%env, this%main, dQdX)
     end if
 

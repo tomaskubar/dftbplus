@@ -430,7 +430,7 @@ contains
 
   !> Get the derivatives of Mulliken charges for atoms
   !>   w.r.t. coordinates of atoms and of external point charges
-  subroutine getChargeDerivatives(env, main, dQdX, dQdXext)
+  subroutine getChargeDerivatives(env, main, dQdX, dQdXext, nExtChrgWRT, extChrgWRT)
 
     !> instance
     type(TEnvironment), intent(inout) :: env
@@ -444,6 +444,13 @@ contains
     !> Output: charge derivatives w.r.t. coordinates of external point charges
     real(dp), optional, intent(out) :: dQdXext(:,:,:)
 
+    !> Number of MM atoms to calculate the derivatives of charges w.r.t. coordinates of those MM
+    !>   atoms
+    integer, optional, intent(in) :: nExtChrgWRT
+
+    !> List of MM atoms to calculate the derivatives of charges w.r.t. coordinates of those MM atoms
+    integer, optional, intent(in) :: extChrgWRT(:)
+
     integer :: iAtomWRT, iExtChgWRT, iAtom
 
     @:ASSERT(size(dQdX, dim=1) == 3)
@@ -451,12 +458,25 @@ contains
     @:ASSERT(size(dQdX, dim=3) == main%nAtom)
     if (main%nExtChrg > 0) then
       @:ASSERT(size(dQdXext, dim=1) == 3)
-      @:ASSERT(size(dQdXext, dim=2) == main%nExtChrg)
+      if (present(nExtChrgWRT)) then
+        @:ASSERT(size(dQdXext, dim=2) == nExtChrgWRT)
+        @:ASSERT(size(extChrgWRT) == nExtChrgWRT)
+      else
+        @:ASSERT(size(dQdXext, dim=2) == main%nExtChrg)
+      end if
       @:ASSERT(size(dQdXext, dim=3) == main%nAtom)
     end if
 
     ! run the calculation
-    call processChargeDerivatives(env, main)
+    if (present(nExtChrgWRT)) then
+      if (nExtChrgWRT > 0) then
+        call processChargeDerivatives(env, main, nExtChrgWRT, extChrgWRT)
+      else
+        call processChargeDerivatives(env, main, nExtChrgWRT=0)
+      end if
+    else
+      call processChargeDerivatives(env, main)
+    end if
 
   ! dQdX(:,:,:) = - main%dQdX(:,:,:)
     do iAtomWRT = 1, main%nAtom
@@ -467,11 +487,19 @@ contains
 
     if (present(dQdXext) .and. main%nExtChrg > 0) then
     ! dQdXext(:,:,:) = - main%dQdXext(:,:,:)
-      do iExtChgWRT = 1, main%nExtChrg
-        do iAtom = 1, main%nAtom
-          dQdXext(:, iExtChgWRT, iAtom) = - main%dQdXext(iAtom, :, iExtChgWRT)
+      if (present(nExtChrgWRT)) then
+        do iExtChgWRT = 1, nExtChrgWRT
+          do iAtom = 1, main%nAtom
+            dQdXext(:, iExtChgWRT, iAtom) = - main%dQdXext(iAtom, :, iExtChgWRT)
+          end do
         end do
-      end do
+      else
+        do iExtChgWRT = 1, main%nExtChrg
+          do iAtom = 1, main%nAtom
+            dQdXext(:, iExtChgWRT, iAtom) = - main%dQdXext(iAtom, :, iExtChgWRT)
+          end do
+        end do
+      end if
     end if
 
   end subroutine getChargeDerivatives
