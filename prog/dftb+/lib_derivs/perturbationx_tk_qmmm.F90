@@ -427,16 +427,16 @@ contains
 
     end do lpAtom
 
-    write (stdOut, *)
-    write (stdOut, *) 'Charge derivatives TK'
-    do iExtChg = 1, nExtCharge
-      write (stdOut,"(A,I0)") '/d MMcharge_', iExtChg
-      do jAt = 1, nAtom
-        write (stdOut, '(I3,3F11.6)') jAt, -dqOut(jAt, :, iExtChg)
-      end do
-      write (stdOut, *)
-    end do
-    write (stdOut, *)
+  ! write (stdOut, *)
+  ! write (stdOut, *) 'Charge derivatives TK'
+  ! do iExtChg = 1, nExtCharge
+  !   write (stdOut,"(A,I0)") '/d MMcharge_', iExtChg
+  !   do jAt = 1, nAtom
+  !     write (stdOut, '(I3,3F11.6)') jAt, -dqOut(jAt, :, iExtChg)
+  !   end do
+  !   write (stdOut, *)
+  ! end do
+  ! write (stdOut, *)
 
   end subroutine dPsidxQMMM_TK
 

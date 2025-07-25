@@ -842,18 +842,18 @@ contains
   ! end do
 
     if (tMulliken .or. tSccCalc) then
-      write (stdOut, *)
-      write (stdOut, *) 'Charge derivatives'
-      do iAt = 1, nAtom
-        write (stdOut,"(A,I0)") '/d Atom_', iAt
-        do iS = 1, nSpin
-          do jAt = 1, nAtom
-            write (stdOut, '(I3,3F11.6)') jAt, -sum(dqOut(:, jAt, iS, :, iAt), dim=1)
-          end do
-          write (stdOut, *)
-        end do
-      end do
-      write (stdOut, *)
+    ! write (stdOut, *)
+    ! write (stdOut, *) 'Charge derivatives'
+    ! do iAt = 1, nAtom
+    !   write (stdOut,"(A,I0)") '/d Atom_', iAt
+    !   do iS = 1, nSpin
+    !     do jAt = 1, nAtom
+    !       write (stdOut, '(I3,3F11.6)') jAt, -sum(dqOut(:, jAt, iS, :, iAt), dim=1)
+    !     end do
+    !     write (stdOut, *)
+    !   end do
+    ! end do
+    ! write (stdOut, *)
 
       ! save output -- spin channel 1
       @:ASSERT(size(dQdX, dim=1) == nAtom)

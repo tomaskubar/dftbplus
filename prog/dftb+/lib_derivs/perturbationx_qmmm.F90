@@ -661,18 +661,18 @@ contains
   ! end do
 
     if (tMulliken .or. tSccCalc) then
-      write (stdOut, *)
-      write (stdOut, *) 'Charge derivatives'
-      do iExtChrgWRT = 1, nExtChrgWRT
-        write (stdOut,"(A,I0)") '/d MMcharge_', extChrgWRT(iExtChrgWRT)
-        do iS = 1, nSpin
-          do jAt = 1, nAtom
-            write (stdOut, '(I3,3F11.6)') jAt, -sum(dqOut(:, jAt, iS, :, iExtChrgWRT), dim=1)
-          end do
-          write (stdOut, *)
-        end do
-      end do
-      write (stdOut, *)
+    ! write (stdOut, *)
+    ! write (stdOut, *) 'Charge derivatives'
+    ! do iExtChrgWRT = 1, nExtChrgWRT
+    !   write (stdOut,"(A,I0)") '/d MMcharge_', extChrgWRT(iExtChrgWRT)
+    !   do iS = 1, nSpin
+    !     do jAt = 1, nAtom
+    !       write (stdOut, '(I3,3F11.6)') jAt, -sum(dqOut(:, jAt, iS, :, iExtChrgWRT), dim=1)
+    !     end do
+    !     write (stdOut, *)
+    !   end do
+    ! end do
+    ! write (stdOut, *)
 
       ! save output -- spin channel 1
       @:ASSERT(size(dQdXext, dim=1) == nAtom)

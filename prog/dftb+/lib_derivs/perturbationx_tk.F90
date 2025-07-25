@@ -596,16 +596,16 @@ contains
 
     end do lpAtom
 
-    write (stdOut, *)
-    write (stdOut, *) 'Charge derivatives TK'
-    do iAt = 1, nAtom
-      write (stdOut,"(A,I0)") '/d Atom_', iAt
-      do jAt = 1, nAtom
-        write (stdOut, '(I3,3F11.6)') jAt, -dqOut(jAt, :, iAt)
-      end do
-      write (stdOut, *)
-    end do
-    write (stdOut, *)
+  ! write (stdOut, *)
+  ! write (stdOut, *) 'Charge derivatives TK'
+  ! do iAt = 1, nAtom
+  !   write (stdOut,"(A,I0)") '/d Atom_', iAt
+  !   do jAt = 1, nAtom
+  !     write (stdOut, '(I3,3F11.6)') jAt, -dqOut(jAt, :, iAt)
+  !   end do
+  !   write (stdOut, *)
+  ! end do
+  ! write (stdOut, *)
 
   end subroutine dPsidx_TK
 
