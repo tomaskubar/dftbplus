@@ -108,10 +108,18 @@ contains
     ! feed those values into the neural net
     call this%nn%evaluate(this%sf%sf, energyAtom)
 
-    ! the unit is kcal/mol throughout the machine learning code
-    energyAtom(:) = energyAtom(:) * kcal_mol__Hartree
+    ! if the unit is kcal/mol throughout the machine learning code
+    if (this%nn%tUnitKcalMol) then
+      ! then convert to Hartree
+      energyAtom(:) = energyAtom(:) * kcal_mol__Hartree
+    end if
 
     energy = sum(energyAtom)
+
+    ! scale the energy if requested
+    if (this%nn%tScaleEnergy) then
+      energy = energy * this%nn%scaleFactors(2) + this%nn%scaleFactors(1)
+    end if
 
     write (*,'(A,F15.10)') "MACHINE_LEARNING_ENERGY ", energy
 
@@ -155,12 +163,25 @@ contains
     ! feed those values into the neural net
     call this%nn%evaluateDerivs(this%sf%dsfdr, energyDerivsAtom)
 
-    ! the unit is kcal/mol throughout the machine learning code
-    ! also 1/AA is converted to 1/bohr
-    energyDerivsAtom(:,:,:) = energyDerivsAtom(:,:,:) * kcal_mol__Hartree * Bohr__AA
+    ! if the unit is kcal/mol throughout the machine learning code
+    if (this%nn%tUnitKcalMol) then
+      ! then convert gradients to Hartree
+      energyDerivsAtom(:,:,:) = energyDerivsAtom(:,:,:) * kcal_mol__Hartree
+    end if
+
+    ! if the unit is Angstrom throughout the machine learning code
+    if (this%sf%tUnitAngstrom) then
+      ! then convert 1/AA to 1/bohr
+      energyDerivsAtom(:,:,:) = energyDerivsAtom(:,:,:) * Bohr__AA
+    end if
 
     ! sum contributions from all of the neural nets (one for each atom)
     derivsAdd = sum(energyDerivsAtom, 3)
+
+    ! scale the gradients if requested
+    if (this%nn%tScaleEnergy) then
+      derivsAdd = derivsAdd * this%nn%scaleFactors(2)
+    end if
 
     derivs = derivs + derivsAdd
 

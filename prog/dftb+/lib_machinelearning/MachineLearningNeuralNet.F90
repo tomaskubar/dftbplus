@@ -59,6 +59,19 @@ module dftbp_machinelearning_nn
     !> Array of individual nets, one for each element
     type(TMLNeuralNetSpeciesInp), allocatable :: species(:)
 
+    !> Unit of the energies calculated by the neural net.
+    !> .true. means kcal/mol, .false. means Hartree
+    logical :: tUnitKcalMol
+
+    !> Scale the resulting energy or not.
+    !> If .true., then the energy is up-scaled from zero mean and unit variance
+    !>   to the actual values, using the mean and variance determined from the training set.
+    !> These are read from files y_scaler_mean.txt & y_scaler_scale.txt.
+    logical :: tScaleEnergy
+
+    !> Parameters for the above scaling -- mean and scale for the energy
+    real(dp) :: scaleFactors(2)
+
   end type TMLNeuralNetInp
 
   type :: TMLNeuralNetLayer
@@ -124,6 +137,18 @@ module dftbp_machinelearning_nn
 
     !> Array of individual nets, one for each atom
     type(TMLNeuralNetAtom), allocatable :: atom(:)
+
+    !> Unit of the energies calculated by the neural net.
+    !> .true. means kcal/mol, .false. means Hartree
+    logical :: tUnitKcalMol
+
+    !> Scale the resulting energy or not.
+    !> If .true., then the energy is up-scaled from zero mean and unit variance
+    !>   to the actual values, using the mean and variance determined from the training set.
+    logical :: tScaleEnergy
+
+    !> Parameters for the above scaling -- mean and scale for the energy
+    real(dp) :: scaleFactors(2)
 
   contains
   
@@ -456,6 +481,13 @@ contains
   do iAt = 1, this%nAt
     call this%atom(iAt)%init(species(iAt), this%species(species(iAt)), this%nAt, input%nSF)
   end do
+
+  ! Scaling of the energy
+  this%tScaleEnergy = input%tScaleEnergy
+  this%scaleFactors = input%scaleFactors
+
+  ! Unit of the energy
+  this%tUnitKcalMol = input%tUnitKcalMol
 
   end subroutine NeuralNet_init
 

@@ -42,6 +42,23 @@ module dftbp_machinelearning_sf
     !> Use neighborsearching to evaluate symmetry functions or not
     logical :: tNeighborSearching
 
+    !> Scale the symmetry functions or not
+    !> If .true., then each symmetry function is scaled to zero mean and unit variance
+    !> The mean and variance are determined from the training set,
+    !>   and are read from files x_scaler_mean.txt & x_scaler_scale.txt.
+    logical :: tScaleSF
+
+    !> Parameters for the above scaling -- mean and scale for each SF (2 x nSF)
+    real(dp), allocatable :: scaleFactors(:,:)
+
+    !> Unit of the atom coordinates in the ML codebase.
+    !> .true. means Angstrom, .false. means Bohr.
+    logical :: tUnitAngstrom
+
+    !> Employ the corrected expression for the angular filter,
+    !>   corresponding to the original Behler paper?
+    logical :: tCorrectedAngularFilter
+
   end type TMLSymmetryFunctionsInp
 
 
@@ -110,6 +127,21 @@ module dftbp_machinelearning_sf
     !> Number of neighbor pairs in the list, 1st dim -- of which atom
     integer, allocatable :: neighborPairCount(:)
 
+    !> Scale the symmetry functions or not
+    !> If .true., then each symmetry function is scaled to zero mean and unit variance.
+    logical :: tScaleSF
+
+    !> Parameters for the above scaling -- mean and scale for each SF (2 x nSF)
+    real(dp), allocatable :: scaleFactors(:,:)
+
+    !> Unit of the atom coordinates in the ML codebase.
+    !> .true. means Angstrom, .false. means Bohr.
+    logical :: tUnitAngstrom
+
+    !> Employ the corrected expression for the angular filter,
+    !>   corresponding to the original Behler paper?
+    logical :: tCorrectedAngularFilter
+
   contains
 
     procedure :: init => SymmetryFunctions_init
@@ -174,6 +206,14 @@ contains
 
   allocate(this%sf(this%nSF, this%nAt))
   allocate(this%dsfdr(3, this%nAt, this%nSF, this%nAt))
+
+  this%tScaleSF = input%tScaleSF
+  if(this%tScaleSF) then
+    allocate(this%scaleFactors(2, this%nSF))
+    this%scaleFactors = input%scaleFactors
+  end if
+  this%tUnitAngstrom = input%tUnitAngstrom
+  this%tCorrectedAngularFilter = input%tCorrectedAngularFilter
 
   end subroutine SymmetryFunctions_init
 
@@ -309,8 +349,16 @@ contains
 
   @:ASSERT(all(shape(coords) == shape(this%coords)))
 
+  ! if the unit of coordinates in the ML codebase is Angstrom, then convert the unit
+  if (this%tUnitAngstrom) then
+    ! conversion from Bohr to Angstrom
+    this%coords = coords * Bohr__AA
+  else
+    ! the unit in ML training was Bohr, so no conversion is needed
+    this%coords = coords
+  end if
   ! conversion is OK
-  this%coords = coords * Bohr__AA
+  !this%coords = coords * Bohr__AA
   
   ! Calculate interatomic distances
   call this%calculateDistance()
@@ -399,8 +447,13 @@ contains
           lambda = this%angularParameters(3, iSF)
           iSymmFuncInd = this%nSp * this%nRadialFunction &
               & + (speciesPair - 1) * this%nAngularFunction + iSF
-          this%sf(iSymmFuncInd, iAt1) = this%sf(iSymmFuncInd, iAt1) &
-              & + angularFilter(eta, zeta, lambda, cutoff, R12, R13, R23)
+          if (this%tCorrectedAngularFilter) then
+            this%sf(iSymmFuncInd, iAt1) = this%sf(iSymmFuncInd, iAt1) &
+                & + angularFilterCorrected(eta, zeta, lambda, cutoff, R12, R13, R23)
+          else
+            this%sf(iSymmFuncInd, iAt1) = this%sf(iSymmFuncInd, iAt1) &
+                & + angularFilter(eta, zeta, lambda, cutoff, R12, R13, R23)
+          end if
         end do
       end do
 
@@ -408,6 +461,13 @@ contains
     ! write (*,'(F15.10)') this%sf(:, iAt1)
 
     end do
+
+    ! scale the symmetry functions if requested
+    if (this%tScaleSF) then
+      do iSF = 1, this%nSF
+        this%sf(iSF, :) = (this%sf(iSF, :) - this%scaleFactors(1, iSF)) / this%scaleFactors(2, iSF)
+      end do
+    end if
         
   end subroutine SymmetryFunctions_evaluate
 
@@ -507,8 +567,13 @@ contains
             lambda = this%angularParameters(3, iSF)
             iSymmFuncInd = this%nSp * this%nRadialFunction &
                 & + (iSpPair23 - 1) * this%nAngularFunction + iSF
-            derivAdd = angularFilterDeriv(eta, zeta, lambda, cutoff, R12, R13, R23, xyz1, xyz2, xyz3, &
-                & tAtom0Is1, tAtom0Is2, tAtom0Is3)
+            if (this%tCorrectedAngularFilter) then
+              derivAdd = angularFilterDerivCorrected(eta, zeta, lambda, cutoff, R12, R13, R23, &
+                & xyz1, xyz2, xyz3, tAtom0Is1, tAtom0Is2, tAtom0Is3)
+            else
+              derivAdd = angularFilterDeriv(eta, zeta, lambda, cutoff, R12, R13, R23, xyz1, xyz2, xyz3, &
+                  & tAtom0Is1, tAtom0Is2, tAtom0Is3)
+            end if
             this%dsfdr(:, iAt0, iSymmFuncInd, iAt1) = this%dsfdr(:, iAt0, iSymmFuncInd, iAt1) + derivAdd
           end do
         end do
@@ -521,6 +586,13 @@ contains
       end do ! iAt0
 
     end do ! iAt1
+
+    ! scale the symmetry function derivatives if requested
+    if (this%tScaleSF) then
+      do iSF = 1, this%nSF
+        this%dsfdr(:, :, iSF, :) = this%dsfdr(:, :, iSF, :) / this%scaleFactors(2, iSF)
+      end do
+    end if
         
   end subroutine SymmetryFunctions_evaluateDerivs
 
@@ -605,6 +677,27 @@ contains
         & * switching(Rij, cutoff) * switching(Rik, cutoff) * switching(Rjk, cutoff)
 
   end function angularFilter
+
+
+  pure function angularFilterCorrected(eta, zeta, lambda, cutoff, Rij, Rik, Rjk)
+
+    !> angular symmetry function parameters
+    real(dp), intent(in) :: eta, zeta, lambda, cutoff
+
+    !> distances among three atoms i, j, k
+    real(dp), intent(in) :: Rij, Rik, Rjk
+
+    !> output
+    real(dp) :: angularFilterCorrected
+
+    real(dp) :: cosAngle, radFilter
+
+    cosAngle = (Rij**2 + Rik**2 - Rjk**2)/(2._dp * Rij * Rik)
+    radFilter = exp(-eta * (Rij**2 + Rik**2 + Rjk**2))
+    angularFilterCorrected = 2._dp**(1._dp - zeta) * (1._dp + lambda * cosAngle)**zeta * radFilter &
+        & * switching(Rij, cutoff) * switching(Rik, cutoff) * switching(Rjk, cutoff)
+
+  end function angularFilterCorrected
 
 
   !> Derivative of the angular symmetry function
@@ -697,6 +790,76 @@ contains
     end if
 
   end function angularFilterDeriv
+
+
+    !> Derivative of the angular symmetry function
+  function angularFilterDerivCorrected(eta, zeta, lambda, cutoff, R12, R13, R23, xyz1, xyz2, xyz3, &
+      & tAtom0Is1, tAtom0Is2, tAtom0Is3)
+
+    !> angular symmetry function parameters
+    real(dp), intent(in) :: eta, zeta, lambda, cutoff
+
+    !> distances
+    real(dp), intent(in) :: R12, R13, R23
+
+    !> coordinates of atoms 1, 2 and 3
+    real(dp), dimension(3), intent(in) :: xyz1, xyz2, xyz3
+
+    !> are we differentiating w.r.t. atom 1 or 2 or 3? (never two or all)
+    logical, intent(in) :: tAtom0Is1, tAtom0Is2, tAtom0Is3
+
+    !> output
+    real(dp), dimension(3) :: angularFilterDerivCorrected
+
+    real(dp) :: cosAngle, onePlusLambdaCosAngle, gaussDist
+    real(dp) :: dG_dR12, dG_dR13, dG_dR23
+
+    @:ASSERT(tAtom0Is1 .or. tAtom0Is2 .or. tAtom0Is3)
+
+    cosAngle = (R12**2 + R13**2 - R23**2)/(2._dp * R12 * R13)
+    onePlusLambdaCosAngle = 1._dp + lambda * cosAngle
+    gaussDist = exp(- eta * (R12**2 + R13**2 + R23**2))
+
+    if (tAtom0Is1 .or. tAtom0Is2) then
+      dG_dR12 = 2._dp**(1._dp - zeta) * gaussDist * onePlusLambdaCosAngle**zeta * ( ( &
+              & - 2._dp * eta * R12 + lambda * (1._dp / R13 - cosAngle / R12) / &
+              &     onePlusLambdaCosAngle * zeta) * switching(R12, cutoff) + &
+              & switchingDeriv(R12, cutoff) ) * switching(R13, cutoff) * switching(R23, cutoff)
+    end if
+
+    if (tAtom0Is1 .or. tAtom0Is3) then
+      dG_dR13 = 2._dp**(1._dp - zeta) * gaussDist * onePlusLambdaCosAngle**zeta * ( ( &
+              & - 2._dp * eta * R13 + lambda * (1._dp / R12 - cosAngle / R13) / &
+              &     onePlusLambdaCosAngle * zeta) * switching(R13, cutoff) + &
+              & switchingDeriv(R13, cutoff) ) * switching(R12, cutoff) * switching(R23, cutoff)
+    end if
+
+    if (tAtom0Is2 .or. tAtom0Is3) then
+      dG_dR23 = 2._dp**(1._dp - zeta) * gaussDist * onePlusLambdaCosAngle**zeta * ( ( &
+              & - 2._dp * eta * R23 - lambda * R23 / R12 / R13 / onePlusLambdaCosAngle * zeta) &
+              &   * switching(R23, cutoff) + switchingDeriv(R23, cutoff) ) &
+              & * switching(R12, cutoff) * switching(R13, cutoff)
+    end if
+
+    if (tAtom0Is1) then
+    ! vector21 = (xyz1(:) - xyz2(:)) / R12
+    ! vector31 = (xyz1(:) - xyz3(:)) / R13
+      angularFilterDerivCorrected = dG_dR12 * (xyz1(:) - xyz2(:)) / R12 + dG_dR13 * (xyz1(:) - xyz3(:)) / R13
+    end if
+
+    if (tAtom0Is2) then
+    ! vector12 = (xyz2(:) - xyz1(:)) / R12
+    ! vector32 = (xyz2(:) - xyz3(:)) / R23
+      angularFilterDerivCorrected = dG_dR12 * (xyz2(:) - xyz1(:)) / R12 + dG_dR23 * (xyz2(:) - xyz3(:)) / R23
+    end if
+
+    if (tAtom0Is3) then
+    ! vector13 = (xyz3(:) - xyz1(:)) / R13
+    ! vector23 = (xyz3(:) - xyz2(:)) / R23
+      angularFilterDerivCorrected = dG_dR13 * (xyz3(:) - xyz1(:)) / R13 + dG_dR23 * (xyz3(:) - xyz2(:)) / R23
+    end if
+
+  end function angularFilterDerivCorrected
 
 
   !> Cutoff / switching function

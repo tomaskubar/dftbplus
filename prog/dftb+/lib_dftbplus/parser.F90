@@ -7324,7 +7324,7 @@ contains
     !> Contains the input for the neural network on exit
     type(TMLNeuralNetInp), intent(out) :: input_nn
 
-    !> Contains the input for the neural network on exit
+    !> Contains the input for the symmetry functions on exit
     type(TMLSymmetryFunctionsInp), intent(out) :: input_sf
 
     type(fnode), pointer :: symmetryFunctions, child, value1
@@ -7334,6 +7334,8 @@ contains
     integer :: nTotalRadialFunction, nTotalAngularFunction
     integer :: iAt, iSp1, iSp2, lowAtomicNumber, previousAtomicNumber, foundSpecies
     integer, allocatable :: atomicNumberPerSpecies(:), newOrderPerSpecies(:)
+    character(lc) :: fileName
+    integer :: file
 
     call getChild(node, "SymmetryFunctions", symmetryFunctions)
 
@@ -7427,12 +7429,22 @@ contains
     nTotalAngularFunction = input_sf%nAngularFunction * geo%nSpecies * (geo%nSpecies + 1) / 2
     input_sf%nSymmetryFunctions = nTotalRadialFunction + nTotalAngularFunction
 
-    call readNeuralNetParameters(node, geo, input_sf%nSymmetryFunctions, input_nn)
+    ! Scaling of the symmetry functions
+    call getChildValue(symmetryFunctions, "ScaleSymmetryFunctions", input_sf%tScaleSF, .false.)
+
+    ! Unit of atom coordinates used in the training of the ML model
+    call getChildValue(symmetryFunctions, "UnitIsAngstrom", input_sf%tUnitAngstrom, .true.)
+
+    ! Employ the corrected expression for the angular filter,
+    !   corresponding to the original Behler paper?
+    call getChildValue(symmetryFunctions, "CorrectedAngularFilter", input_sf%tCorrectedAngularFilter, .false.)
+
+    call readNeuralNetParameters(node, geo, input_sf%nSymmetryFunctions, input_nn, input_sf)
 
 
   end subroutine readNeuralNet
 
-  subroutine readNeuralNetParameters(node, geo, nSymmetryFunctions, input_nn)
+  subroutine readNeuralNetParameters(node, geo, nSymmetryFunctions, input_nn, input_sf)
 
     !> Node to process
     type(fnode), pointer :: node
@@ -7443,8 +7455,11 @@ contains
     !> Number of symmetry functions
     integer, intent(in) :: nSymmetryFunctions
 
-    !> Contains the input for the neural network on exit
+    !> Input for the neural network
     type(TMLNeuralNetInp), target, intent(out) :: input_nn
+
+    !> Input for the symmetry functions
+    type(TMLSymmetryFunctionsInp), intent(inout) :: input_sf
 
     integer :: iSp
     type(fnode), pointer :: value1, child, child2
@@ -7457,7 +7472,7 @@ contains
     ! NN data
     input_nn%nSp = geo%nSpecies
     input_nn%nAt = geo%nAtom
-    input_nn%nSF = nSymmetryFunctions
+    input_nn%nSF = input_sf%nSymmetryFunctions
     allocate(input_nn%species(input_nn%nSp))
 
     call getChildValue(node, "NeuralNetworkFiles", value1, child=child)
@@ -7529,6 +7544,42 @@ contains
     case default
       call detailedError(node, "Only type2filenames allowed for NeuralNetworkFiles")
     end select
+
+    ! Read the scaling factors for the symmetry functions
+    ! These will be sought in the directory 'Prefix' for NeuralNetworkFiles
+    if (input_sf%tScaleSF) then
+      allocate(input_sf%scaleFactors(2, input_sf%nSymmetryFunctions))
+      ! Read the mean values as an array from a file
+      fileName = trim(prefix) // 'x_scaler_mean.txt'
+      open(newunit=file, file=fileName, status="old", action="read")
+      read(file, *) input_sf%scaleFactors(1, :)
+      close(file)
+      ! Read the std. deviations as an array from a file
+      fileName = trim(prefix) // 'x_scaler_scale.txt'
+      open(newunit=file, file=fileName, status="old", action="read")
+      read(file, *) input_sf%scaleFactors(2, :)
+      close(file)
+    end if
+
+    ! Scaling of the output energy
+    call getChildValue(node, "ScaleEnergy", input_nn%tScaleEnergy, .false.)
+    ! Read the scaling factors for the output energy
+    ! These will be sought in the directory 'Prefix' for NeuralNetworkFiles
+    if (input_nn%tScaleEnergy) then
+      ! Read the mean value from a file
+      fileName = trim(prefix) // 'y_scaler_mean.txt'
+      open(newunit=file, file=fileName, status="old", action="read")
+      read(file, *) input_nn%scaleFactors(1)
+      close(file)
+      ! Read the std. deviation from a file
+      fileName = trim(prefix) // 'y_scaler_scale.txt'
+      open(newunit=file, file=fileName, status="old", action="read")
+      read(file, *) input_nn%scaleFactors(2)
+      close(file)
+    end if
+
+    ! Unit of energy used in the training of the ML model
+    call getChildValue(node, "UnitIsKcalMol", input_nn%tUnitKcalMol, .true.)
 
   end subroutine readNeuralNetParameters
 
