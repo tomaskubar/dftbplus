@@ -112,7 +112,7 @@ module dftbp_cpecalc
 
     if (inp%tElectronegNeuralNet) then
       allocate(this%electronegativityML)
-      call this%electronegativityML%sf%init(inp%electronegativityML%sf, nAtom, this%nSpecies)
+      call this%electronegativityML%sf%init(inp%electronegativityML%sf)
       call this%electronegativityML%nn%init(inp%electronegativityML%nn, species)
     end if
 

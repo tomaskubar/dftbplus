@@ -7356,6 +7356,12 @@ contains
     ! Reduce the list of atom species accordingly.
     call normalize(geo)
 
+    ! Obtain the number of atoms, number of species and array of species
+    input_sf%nAtom = geo%nAtom
+    input_sf%nSpecies = geo%nSpecies
+    allocate(input_sf%species(geo%nAtom))
+    input_sf%species = geo%species
+
     call getChild(node, "SymmetryFunctions", symmetryFunctions)
 
     ! Number of symmetry functions for each element/species

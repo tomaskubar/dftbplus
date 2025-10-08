@@ -1644,8 +1644,7 @@ contains
 
     if (input%ctrl%tMachineLearning) then
       allocate(this%machineLearning)
-      call this%machineLearning%init(input%ctrl%machineLearningInp, this%nAtom, this%nType,&
-          & this%species0)
+      call this%machineLearning%init(input%ctrl%machineLearningInp)
     end if
     
     allocate(this%referenceN0(this%orb%mShell, this%nType))

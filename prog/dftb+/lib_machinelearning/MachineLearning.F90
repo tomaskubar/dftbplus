@@ -45,7 +45,7 @@ module dftbp_machinelearning
 contains
 
   !> Initialize with data from input
-  subroutine TMachineLearning_init(this, input, nAt, nSp, species)
+  subroutine TMachineLearning_init(this, input)
 
     !> instance
     class(TMachineLearning), intent(inout) :: this
@@ -53,24 +53,15 @@ contains
     !> the input structure to be linked into here
     type(TMachineLearningInp), intent(in), target :: input
 
-    !> number of atoms
-    integer, intent(in) :: nAt
-
-    !> number of species/elements
-    integer, intent(in) :: nSp
-
-    !> species of each atom
-    integer, intent(in) :: species(:)
-
     write (*,*) "MACHINE LEARNING INIT"
 
-    @:ASSERT(size(species) == nAt)
+    @:ASSERT(size(input%sf%species) == input%sf%nAtom)
 
     this%input => input
 
-    call this%sf%init(input%sf, nAt, nSp)
+    call this%sf%init(input%sf)
 
-    call this%nn%init(input%nn, species)
+    call this%nn%init(input%nn, input%sf%species)
 
     ! store this information:
     ! atomic indices, atomic element/species, and symmetry function hyperparameters

@@ -18,6 +18,15 @@ module dftbp_machinelearning_sf
     !> List of atoms to be treated with machine learning
     integer, allocatable :: indAtomsML(:)
 
+    !> Number of atoms to be treated with machine learning
+    integer :: nAtom
+
+    !> Number of species/elements
+    integer :: nSpecies
+
+    !> Species of the atoms to be treated with machine learning (dimension nAtom)
+    integer, allocatable :: species(:)
+
     !> Number of symmetry functions (for each species/element)
     integer :: nSymmetryFunctions
 
@@ -166,7 +175,7 @@ contains
 
 
   !> Do this once, at the start of the DFTB+ run
-  subroutine SymmetryFunctions_init(this, input, nAt, nSp)
+  subroutine SymmetryFunctions_init(this, input) !, nAt, nSp)
 
   !> instance
   class(TMLSymmetryFunctions), intent(inout) :: this
@@ -174,18 +183,12 @@ contains
   !> input structure
   type(TMLSymmetryFunctionsInp), intent(in) :: input
 
-  !> number of atoms
-  integer, intent(in) :: nAt
-
-  !> number of species
-  integer, intent(in) :: nSp
-
   write (*,*) "  SYMMETRY FUNCTIONS INIT"
 
   this%indAtomsML = input%indAtomsML
 
-  this%nAt = nAt
-  this%nSp = nSp
+  this%nAt = input%nAtom
+  this%nSp = input%nSpecies
 ! this%nSpPair = nSp * (nSp + 1) / 2
   this%tNeighborSearching = input%tNeighborSearching
   this%nSF = input%nSymmetryFunctions
@@ -200,17 +203,17 @@ contains
   allocate(this%angularParameters(3, this%nAngularFunction))
   this%angularParameters = input%angularParameters
 
-  allocate(this%speciesOrder(nAt))
+  allocate(this%speciesOrder(this%nAt))
   this%speciesOrder = input%speciesOrder
   write (*,*) "speciesOrder"
   write (*,*) this%speciesOrder
 
-  allocate(this%coords(3, nAt))
-  allocate(this%distance(nAt, nAt))
-  allocate(this%neighborListArr(nAt, nAt-1))
-  allocate(this%neighborListCount(nAt))
-  allocate(this%neighborPairArr(nAt, (nAt-1)*(nAt-2)/2, 2))
-  allocate(this%neighborPairCount(nAt))
+  allocate(this%coords(3, this%nAt))
+  allocate(this%distance(this%nAt, this%nAt))
+  allocate(this%neighborListArr(this%nAt, this%nAt-1))
+  allocate(this%neighborListCount(this%nAt))
+  allocate(this%neighborPairArr(this%nAt, (this%nAt-1)*(this%nAt-2)/2, 2))
+  allocate(this%neighborPairCount(this%nAt))
 
   allocate(this%sf(this%nSF, this%nAt))
   allocate(this%dsfdr(3, this%nAt, this%nSF, this%nAt))
