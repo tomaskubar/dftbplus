@@ -78,13 +78,13 @@ contains
   end subroutine TMachineLearning_init
 
   !> Get energy contributions from machine learning
-  function TMachineLearning_getEnergy(this, coords, img2CentCell) result(energy)
+  function TMachineLearning_getEnergy(this, coordsIn, img2CentCell) result(energy)
 
     !> instance
     class(TMachineLearning), intent(inout) :: this
 
     !> Current coordinates
-    real(dp), intent(in) :: coords(:,:)
+    real(dp), intent(in) :: coordsIn(:,:)
 
     !> Updated mapping to central cell.
     integer, intent(in) :: img2CentCell(:)
@@ -97,12 +97,22 @@ contains
 
     integer :: iAt
 
+    ! Coordinates of atoms to be treated with machine learning
+    real(dp), allocatable :: coords(:,:)
+
+    ! Reduce the coordinates to only those atoms which are treated with machine learning
+    allocate(coords(3, size(this%sf%indAtomsML)))
+    do iAt = 1, size(this%sf%indAtomsML)
+      coords(:, iAt) = coordsIn(:, this%sf%indAtomsML(iAt))
+    end do
+
     write (*,*) "MACHINE LEARNING ENERGY"
 
     allocate(energyAtom(size(coords, dim=2)))
 
     ! calculate all of the symmetry functions
     call this%sf%prepare(coords)
+    deallocate(coords)
     call this%sf%evaluate()
 
     ! feed those values into the neural net
@@ -183,9 +193,13 @@ contains
       derivsAdd = derivsAdd * this%nn%scaleFactors(2)
     end if
 
-    derivs = derivs + derivsAdd
+    ! Add the contributions to the total gradients
+    !derivs = derivs + derivsAdd
 
+    ! Add the contributions to the correct atoms
+    !   (those which are treated with machine learning):
     do iAt = 1, size(derivsAdd, dim=2)
+      derivs(:, this%sf%indAtomsML(iAt)) = derivs(:, this%sf%indAtomsML(iAt)) + derivsAdd(:, iAt)
       write (*,'(3F15.10)') derivsAdd(:,iAt)
     end do
 

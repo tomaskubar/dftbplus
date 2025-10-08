@@ -15,6 +15,9 @@ module dftbp_machinelearning_sf
   !> Contains the initialisation data for the Slater-Kirkwood module.
   type :: TMLSymmetryFunctionsInp
 
+    !> List of atoms to be treated with machine learning
+    integer, allocatable :: indAtomsML(:)
+
     !> Number of symmetry functions (for each species/element)
     integer :: nSymmetryFunctions
 
@@ -64,6 +67,9 @@ module dftbp_machinelearning_sf
 
   !> Contains the data for the symmetry function module
   type :: TMLSymmetryFunctions
+
+    !> List of atoms to be treated with machine learning
+    integer, allocatable :: indAtomsML(:)
 
     !> Number of atoms
     integer :: nAt
@@ -175,6 +181,8 @@ contains
   integer, intent(in) :: nSp
 
   write (*,*) "  SYMMETRY FUNCTIONS INIT"
+
+  this%indAtomsML = input%indAtomsML
 
   this%nAt = nAt
   this%nSp = nSp

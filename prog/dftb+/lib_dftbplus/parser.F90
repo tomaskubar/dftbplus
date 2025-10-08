@@ -70,6 +70,7 @@ module dftbp_parser
   use dftbp_machinelearning
   use dftbp_machinelearning_sf
   use dftbp_machinelearning_nn
+  use dftbp_typegeometry
   implicit none
   private
 
@@ -7313,13 +7314,13 @@ contains
   end subroutine readMachineLearning
 
   !> Reads in settings for a neural network model and the symmetry functions used
-  subroutine readNeuralNet(node, geo, input_nn, input_sf)
+  subroutine readNeuralNet(node, geoIn, input_nn, input_sf)
 
     !> Node to process
     type(fnode), pointer :: node
 
     !> Geometry of the current system
-    type(TGeometry), intent(in) :: geo
+    type(TGeometry), intent(in) :: geoIn
 
     !> Contains the input for the neural network on exit
     type(TMLNeuralNetInp), intent(out) :: input_nn
@@ -7336,6 +7337,24 @@ contains
     integer, allocatable :: atomicNumberPerSpecies(:), newOrderPerSpecies(:)
     character(lc) :: fileName
     integer :: file
+
+    character(mc) :: atomsRange
+    type(TGeometry) :: geo
+
+    ! Read the list of atoms to be treated with machine learning
+    atomsRange = "1:-1"
+    call getChildValue(node, "Atoms", buffer, trim(atomsRange), child=child, multiple=.true.)
+    call convAtomRangeToInt(char(buffer), geoIn%speciesNames, geoIn%species, child,&
+       & input_sf%indAtomsML)
+    if (size(input_sf%indAtomsML) == 0) then
+      call error("No atoms specified for machine learning.")
+    end if
+
+    ! Create a reduced geometry containing only the atoms to be treated with ML.
+    geo = geoIn
+    call reduceList(geo, input_sf%indAtomsML)
+    ! Reduce the list of atom species accordingly.
+    call normalize(geo)
 
     call getChild(node, "SymmetryFunctions", symmetryFunctions)
 

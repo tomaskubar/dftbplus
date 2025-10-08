@@ -15,7 +15,7 @@ module dftbp_typegeometry
   private
 
   public :: TGeometry, normalize
-  public :: reduce, setLattice
+  public :: reduce, setLattice, reduceList
 
 
   !> Type for containing geometrical information
@@ -70,6 +70,13 @@ module dftbp_typegeometry
   !> Interface to set a lattice for a geometry
   interface setLattice
     module procedure setLattice_Geometry
+  end interface
+
+  !> Interface for reducing a geometry to a subset of its atoms,
+  !>   which is specified by a list of indices.
+  !> This shall be used in the machine learning procedures.
+  interface reduceList
+   module procedure reduce_Geometry_usingList
   end interface
 
 contains
@@ -183,6 +190,52 @@ contains
     this%recVecs2p = reshape(this%recVecs2p, (/3, 3/), order=(/2, 1/))
 
   end subroutine setLattice_Geometry
+
+
+  !> Reduce the geometry to a subset, specified by means of a list of atoms.
+  subroutine reduce_Geometry_usingList(this, indAtoms, newOrigin, newLatVecs)
+
+    !> Geometry object
+    type(TGeometry), intent(inout) :: this
+
+    !> List of indices of atoms to keep
+    integer, allocatable, intent(in) :: indAtoms(:)
+
+    !> Supercell origin - if not initially periodic, structure is converted
+    real(dp), intent(in), optional :: newOrigin(:)
+
+    !> Lattice vectors for the supercell - if not initially periodic, structure is converted
+    real(dp), intent(in), optional :: newLatVecs(:,:)
+
+    integer, allocatable :: tmpSpecies(:)
+    real(dp), allocatable :: tmpCoords(:,:)
+    integer :: iAt
+
+    this%nAtom = size(indAtoms)
+
+    allocate(tmpSpecies(this%nAtom))
+    do iAt = 1, this%nAtom
+      tmpSpecies(iAt) = this%species(indAtoms(iAt))
+    end do
+    deallocate(this%species)
+    allocate(this%species(this%nAtom))
+    this%species = tmpSpecies
+    deallocate(tmpSpecies)
+
+    allocate(tmpCoords(3, this%nAtom))
+    do iAt = 1, this%nAtom
+      tmpCoords(:, iAt) = this%coords(:, indAtoms(iAt))
+    end do
+    deallocate(this%coords)
+    allocate(this%coords(3, this%nAtom))
+    this%coords = tmpCoords
+    deallocate(tmpCoords)
+
+    if (present(newLatVecs).and.present(newOrigin)) then
+      call setLattice(this, newOrigin, newLatVecs)
+    end if
+
+  end subroutine reduce_Geometry_usingList
 
 
 end module dftbp_typegeometry
