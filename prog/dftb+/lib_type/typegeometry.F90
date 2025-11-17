@@ -108,7 +108,7 @@ contains
       ind = 1
       do iSp = 1, size(oldSpeciesNames)
         if (.not. inUse(iSp)) then
-          continue
+          cycle
         end if
         sf%speciesNames(ind) = oldSpeciesNames(iSp)
         where (oldSpecies == iSp)
