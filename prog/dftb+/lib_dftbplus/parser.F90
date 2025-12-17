@@ -7333,10 +7333,12 @@ contains
     type(TListRealR1) :: realBuffer
   ! integer, allocatable :: nSymmetryFunctions(:)
     integer :: nTotalRadialFunction, nTotalAngularFunction
-    integer :: iAt, iSp1, iSp2, lowAtomicNumber, previousAtomicNumber, foundSpecies
+    integer :: iAt, iSp1, iSp2, lowAtomicNumber, previousAtomicNumber, foundSpecies, atomicNumberTemp
     integer, allocatable :: atomicNumberPerSpecies(:), newOrderPerSpecies(:)
+    integer, allocatable :: atomicNumberPerSpeciesTemp(:)
     character(lc) :: fileName
     integer :: file
+    logical :: bMLspeciesFoundInGeo
 
     character(mc) :: atomsRange
     type(TGeometry) :: geo
@@ -7378,31 +7380,56 @@ contains
 
     ! Atomic numbers (this is because symm functions are ordered by this)
     call getChild(symmetryFunctions, "AtomicNumber", child)
-    allocate(atomicNumberPerSpecies(geo%nSpecies))
-    atomicNumberPerSpecies(:) = 0
-    do iSp1 = 1, geo%nSpecies
-      call getChildValue(child, geo%speciesNames(iSp1), atomicNumberPerSpecies(iSp1))
-  !   write (*,'(A,I2,A,I2)') "Species no. ", iSp1, " has atomic number ", atomicNumberPerSpecies(iSp1)
+    if (.not. associated(child)) then
+      write (*,*) "No atomic numbers specified for symmetry functions. What to do?"
+    end if
+
+    ! Read atomic numbers of the species present in the block
+    ! It is assumed, that all of the species considered in the ML model are defined here,
+    !   and that no other species are present.
+    ! Number of species in the ML model may be larger than the number of species in the geometry,
+    !   if some species are present in the model but not in the current geometry.
+    allocate(atomicNumberPerSpeciesTemp(size(elementSymbol)))
+    atomicNumberPerSpeciesTemp(:) = 0
+    input_sf%nSpeciesOrder = 0
+    do iSp1 = 1, size(elementSymbol)
+      call getChildValue(child, elementSymbol(iSp1), atomicNumberTemp, default=0)
+      if (atomicNumberTemp > 0) then
+        input_sf%nSpeciesOrder = input_sf%nSpeciesOrder + 1
+        atomicNumberPerSpeciesTemp(input_sf%nSpeciesOrder) = atomicNumberTemp
+        write (*,*) "Element ", elementSymbol(iSp1), " with atomic number ", &
+            & atomicNumberPerSpeciesTemp(input_sf%nSpeciesOrder), " is present in the ML model."
+      end if
     end do
-    ! Sort species by atomic number
+
+    ! Now, input_sf%nSpeciesOrder contains the number of species present in the ML model;
+    !      atomicNumberPerSpeciesTemp contains the atomic numbers of all elements,
+    !        with zero for those not present in the ML model.
+
+    ! Elements contained in the ML model are sorted by atomic number here
+    allocate(atomicNumberPerSpecies(input_sf%nSpeciesOrder))
+    atomicNumberPerSpecies(:) = atomicNumberPerSpeciesTemp(1:input_sf%nSpeciesOrder)
+    deallocate(atomicNumberPerSpeciesTemp)
+
+    ! Assign one of the above determined indexes to each species present in the geometry
     allocate(newOrderPerSpecies(geo%nSpecies))
-  ! write (*,*) "Species orderer by atomic number:"
-    previousAtomicNumber = 0
-    do iSp1 = 1, geo%nSpecies
-      lowAtomicNumber = 999
-      ! find the iSp-th lowest atomic number
-      do iSp2 = 1, geo%nSpecies
-        if (atomicNumberPerSpecies(iSp2) < lowAtomicNumber .and. &
-            & atomicNumberPerSpecies(iSp2) > previousAtomicNumber) then
-          lowAtomicNumber = atomicNumberPerSpecies(iSp2)
-          foundSpecies = iSp2
+    ! Search for species geo%species(iSp1) in the list of species present in the ML model
+    do iSp2 = 1, input_sf%nSpeciesOrder
+      bMLspeciesFoundInGeo = .false.
+      do iSp1 = 1, geo%nSpecies
+        if (atomicNumberPerSpecies(iSp2) == symbolToNumber(geo%speciesNames(iSp1))) then
+          newOrderPerSpecies(iSp1) = iSp2
+          bMLspeciesFoundInGeo = .true.
+          exit
         end if
       end do
-      newOrderPerSpecies(foundSpecies) = iSp1
-      previousAtomicNumber = lowAtomicNumber
-  !   write (*,'(A,I2,A,I2,A,I2)') "Species no. ", foundSpecies, &
-  !       & " has order ", newOrderPerSpecies(foundSpecies), &
-  !       & " and atomic number ", atomicNumberPerSpecies(foundSpecies)
+      if (.not. bMLspeciesFoundInGeo) then
+        write (*,'(a,i3,a)') " Element with atomic number ", atomicNumberPerSpecies(iSp2), &
+            & " defined in the ML model is not found in the current geometry."
+        write (*,'(a,i2,a,i2,a)') "      It is assigned species number ", iSp1, &
+            & " and ordered species number ", iSp2, ", and will be unused in the current calculation."
+        write(*,*)
+      end if
     end do
     deallocate(atomicNumberPerSpecies)
     ! Now, for the purpose of ordering symmetry functions,
@@ -7450,8 +7477,8 @@ contains
     end if
 
     ! Calculate the number of symmetry functions for each species/element
-    nTotalRadialFunction = input_sf%nRadialFunction * geo%nSpecies
-    nTotalAngularFunction = input_sf%nAngularFunction * geo%nSpecies * (geo%nSpecies + 1) / 2
+    nTotalRadialFunction = input_sf%nRadialFunction * input_sf%nSpeciesOrder
+    nTotalAngularFunction = input_sf%nAngularFunction * input_sf%nSpeciesOrder * (input_sf%nSpeciesOrder + 1) / 2
     input_sf%nSymmetryFunctions = nTotalRadialFunction + nTotalAngularFunction
 
     ! Scaling of the symmetry functions

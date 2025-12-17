@@ -30,6 +30,11 @@ module dftbp_machinelearning_sf
     !> Number of symmetry functions (for each species/element)
     integer :: nSymmetryFunctions
 
+    !> Number of species/elements present in the model
+    !>  - may be larger than nSpecies if some species are not present in the current geometry
+    !>  - these will be ordered by atomic number
+    integer :: nSpeciesOrder ! TODO better name would be nSpeciesModel
+
     !> Atom species by atom, ordered by atomic number (dimension nAt)
     integer, allocatable :: speciesOrder(:)
 
@@ -85,6 +90,9 @@ module dftbp_machinelearning_sf
 
     !> Number of species
     integer :: nSp
+
+    !> Number of species in the model / ordered by atomic number
+    integer :: nSpOrder
 
 !   !> Number of species pairs
 !   integer :: nSpPair
@@ -189,7 +197,8 @@ contains
 
   this%nAt = input%nAtom
   this%nSp = input%nSpecies
-! this%nSpPair = nSp * (nSp + 1) / 2
+  this%nSpOrder = input%nSpeciesOrder
+! this%nSpPair = nSpOrder * (nSpOrder + 1) / 2
   this%tNeighborSearching = input%tNeighborSearching
   this%nSF = input%nSymmetryFunctions
 
@@ -409,8 +418,8 @@ contains
     iSpLa = iSp1
   end if
 
-  ! expression that is unique and always > 0 and <= nSp * (nSp + 1) / 2
-  SymmetryFunctions_getSpeciesPair = this%nSp * (iSpSm - 1) - iSpSm * (iSpSm - 1) / 2 + iSpLa
+  ! expression that is unique and always > 0 and <= nSpOrder * (nSpOrder + 1) / 2
+  SymmetryFunctions_getSpeciesPair = this%nSpOrder * (iSpSm - 1) - iSpSm * (iSpSm - 1) / 2 + iSpLa
 
   end function SymmetryFunctions_getSpeciesPair
 
@@ -456,7 +465,7 @@ contains
           eta = this%angularParameters(1, iSF)
           zeta = this%angularParameters(2, iSF)
           lambda = this%angularParameters(3, iSF)
-          iSymmFuncInd = this%nSp * this%nRadialFunction &
+          iSymmFuncInd = this%nSpOrder * this%nRadialFunction &
               & + (speciesPair - 1) * this%nAngularFunction + iSF
           if (this%tCorrectedAngularFilter) then
             this%sf(iSymmFuncInd, iAt1) = this%sf(iSymmFuncInd, iAt1) &
@@ -473,13 +482,25 @@ contains
 
     end do
 
+!   write (*,*) "UNSCALED Symmetry functions"
+!   do iSf = 1, this%nSF
+!     write (*,'(30F10.6)') this%sf(iSF,:)
+!   end do
+!   write (*,*) "UNSCALED Symmetry functions -- END"
+
     ! scale the symmetry functions if requested
     if (this%tScaleSF) then
       do iSF = 1, this%nSF
         this%sf(iSF, :) = (this%sf(iSF, :) - this%scaleFactors(1, iSF)) / this%scaleFactors(2, iSF)
       end do
     end if
-        
+
+!   write (*,*) "SCALED Symmetry functions"
+!   do iSf = 1, this%nSF
+!     write (*,'(30F10.6)') this%sf(iSF,:)
+!   end do
+!   write (*,*) "SCALED Symmetry functions -- END"
+
   end subroutine SymmetryFunctions_evaluate
 
 
@@ -576,7 +597,7 @@ contains
             eta = this%angularParameters(1, iSF)
             zeta = this%angularParameters(2, iSF)
             lambda = this%angularParameters(3, iSF)
-            iSymmFuncInd = this%nSp * this%nRadialFunction &
+            iSymmFuncInd = this%nSpOrder * this%nRadialFunction &
                 & + (iSpPair23 - 1) * this%nAngularFunction + iSF
             if (this%tCorrectedAngularFilter) then
               derivAdd = angularFilterDerivCorrected(eta, zeta, lambda, cutoff, R12, R13, R23, &

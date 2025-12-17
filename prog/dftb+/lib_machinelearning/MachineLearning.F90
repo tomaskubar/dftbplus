@@ -106,6 +106,12 @@ contains
     deallocate(coords)
     call this%sf%evaluate()
 
+!   write (*,*) "  Symmetry functions evaluated:"
+!   do iAt = 1, this%sf%nSF
+!     write (*,'(A,I4,A,30F10.6)') "    SF ", iAt, ": ", this%sf%sf(iAt,:)
+!   end do
+!   write (*,*) "  Symmetry functions -- END"
+
     ! feed those values into the neural net
     call this%nn%evaluate(this%sf%sf, energyAtom)
 
