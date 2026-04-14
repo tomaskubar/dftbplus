@@ -1,0 +1,494 @@
+!--------------------------------------------------------------------------------------------------!
+!  DFTB+: general package for performing fast atomistic simulations                                !
+!  Copyright (C) 2006 - 2025  DFTB+ developers group                                               !
+!                                                                                                  !
+!  See the LICENSE file for terms of usage and distribution.                                       !
+!--------------------------------------------------------------------------------------------------!
+
+#:include 'common.fypp'
+#:include 'error.fypp'
+
+!> Update the SCC hamiltonian
+module dftbp_dftb_hamiltonian
+  use dftbp_common_accuracy, only : dp
+  use dftbp_common_environment, only : TEnvironment
+  use dftbp_common_status, only : TStatus
+  use dftbp_dftb_dftbplusu, only : TDftbU
+  use dftbp_dftb_dispersions, only : TDispersionIface
+  use dftbp_dftb_mdftb, only : TMdftb
+  use dftbp_dftb_periodic, only : TNeighbourList
+  use dftbp_dftb_potentials, only : TPotentials
+  use dftbp_dftb_scc, only : TScc
+  use dftbp_dftb_shift, only : addAtomicMultipoleShift, addOnSiteShift, addShift, totalShift
+  use dftbp_dftb_spin, only : getSpinShift
+  use dftbp_dftb_spinorbit, only : getDualSpinOrbitShift
+  use dftbp_dftb_thirdorder, only : TThirdOrder
+  use dftbp_extlibs_tblite, only : TTBLite
+  use dftbp_solvation_solvation, only : TSolvation
+  use dftbp_type_commontypes, only : TOrbitals
+  use dftbp_type_integral, only : TIntegral
+  use dftbp_type_multipole, only : TMultipole
+  implicit none
+
+  private
+  public :: resetExternalPotentials, getSccHamiltonian, mergeExternalPotentials
+  public :: resetInternalPotentials, addChargePotentials
+  public :: addBlockChargePotentials, TRefExtPot
+  public :: constrainSccHamiltonian
+
+  !> Container for external potentials
+  type :: TRefExtPot
+    real(dp), allocatable :: atomPot(:,:)
+    real(dp), allocatable :: shellPot(:,:,:)
+    real(dp), allocatable :: potGrad(:,:)
+  end type TRefExtPot
+
+contains
+
+
+  !> Sets the external potential components to zero
+  subroutine resetExternalPotentials(refExtPot, potential)
+
+    !> Reference external potential (usually set via API)
+    type(TRefExtPot), intent(in) :: refExtPot
+
+    !> Potential contributions
+    type(TPotentials), intent(inout) :: potential
+
+    if (allocated(refExtPot%atomPot)) then
+      potential%extAtom(:,:) = refExtPot%atomPot
+    else
+      potential%extAtom(:,:) = 0.0_dp
+    end if
+    if (allocated(refExtPot%shellPot)) then
+      potential%extShell(:,:,:) = refExtPot%shellPot
+    else
+      potential%extShell(:,:,:) = 0.0_dp
+    end if
+    potential%extBlock(:,:,:,:) = 0.0_dp
+    if (allocated(refExtPot%potGrad)) then
+      potential%extGrad(:,:) = refExtPot%potGrad
+    else
+      potential%extGrad(:,:) = 0.0_dp
+    end if
+    if (allocated(potential%extOnSiteAtom)) potential%extOnSiteAtom(:,:) = 0.0_dp
+    if (allocated(potential%extDipoleAtom)) potential%extDipoleAtom(:, :) = 0.0_dp
+    if (allocated(potential%extQuadrupoleAtom)) potential%extQuadrupoleAtom(:, :) = 0.0_dp
+
+  end subroutine resetExternalPotentials
+
+
+  !> Merges atomic and shell resolved external potentials into blocked one
+  subroutine mergeExternalPotentials(orb, species, potential)
+
+    !> Atomic orbital information
+    type(TOrbitals), intent(in) :: orb
+
+    !> Species for atoms
+    integer, intent(in) :: species(:)
+
+    !> Potential energy contributions
+    type(TPotentials), intent(inout) :: potential
+
+    call totalShift(potential%extShell, potential%extAtom, orb, species)
+    call totalShift(potential%extBlock, potential%extShell, orb, species)
+    if (allocated(potential%extDipoleAtom)) then
+      potential%extDipoleAtom(:,:) = potential%extDipoleAtom + potential%extGrad
+    end if
+    if (allocated(potential%extQuadrupoleAtom)) then
+    !  potential%extQuadrupoleAtom(:,:) = potential%extQuadrupoleAtom + potential%extGrad2
+    end if
+
+  end subroutine mergeExternalPotentials
+
+
+  !> Reset internal potential related quantities
+  subroutine resetInternalPotentials(tDualSpinOrbit, xi, orb, species, potential)
+
+    !> Is dual spin orbit being used (block potentials)
+    logical, intent(in) :: tDualSpinOrbit
+
+    !> Spin orbit constants if required
+    real(dp), allocatable, intent(in) :: xi(:,:)
+
+    !> Atomic orbital information
+    type(TOrbitals), intent(in) :: orb
+
+    !> Chemical species
+    integer, intent(in) :: species(:)
+
+    !> Potentials in the system
+    type(TPotentials), intent(inout) :: potential
+
+    @:ASSERT(.not. tDualSpinOrbit .or. allocated(xi))
+
+    potential%intAtom(:,:) = 0.0_dp
+    potential%intShell(:,:,:) = 0.0_dp
+    potential%intBlock(:,:,:,:) = 0.0_dp
+    potential%orbitalBlock(:,:,:,:) = 0.0_dp
+    potential%iOrbitalBlock(:,:,:,:) = 0.0_dp
+    if (tDualSpinOrbit) then
+      call getDualSpinOrbitShift(potential%iOrbitalBlock, xi, orb, species)
+    end if
+    if (allocated(potential%intOnSiteAtom)) then
+      potential%intOnSiteAtom(:,:) = 0.0_dp
+    end if
+    if (allocated(potential%dipoleAtom)) then
+      potential%dipoleAtom(:,:) = 0.0_dp
+    end if
+    if (allocated(potential%quadrupoleAtom)) then
+      potential%quadrupoleAtom(:,:) = 0.0_dp
+    end if
+
+  end subroutine resetInternalPotentials
+
+
+  !> Add potentials coming from electrostatics (in various boundary conditions and models), possibly
+  !> spin, and where relevant dispersion
+  subroutine addChargePotentials(env, sccCalc, tblite, updateScc, qInput, q0, chargePerShell,&
+      & orb, multipole, species, neighbourList, img2CentCell, spinW, solvation, thirdOrd,&
+      & dispersion, potential, errStatus)
+
+    !> Environment settings
+    type(TEnvironment), intent(inout) :: env
+
+    !> SCC module internal variables
+    type(TScc), allocatable, intent(inout) :: sccCalc
+
+    !> Library interface handler
+    type(TTBLite), intent(inout), allocatable :: tblite
+
+    !> Whether the charges in the scc calculator should be updated before obtaining the potential
+    logical, intent(in) :: updateScc
+
+    !> Input atomic populations
+    real(dp), intent(in) :: qInput(:,:,:)
+
+    !> Reference atomic occupations
+    real(dp), intent(in) :: q0(:,:,:)
+
+    !> Charges per atomic shell
+    real(dp), intent(in) :: chargePerShell(:,:,:)
+
+    !> Atomic orbital information
+    type(TOrbitals), intent(in) :: orb
+
+    !> Multipole information
+    type(TMultipole), intent(in) :: multipole
+
+    !> Species of all atoms
+    integer, target, intent(in) :: species(:)
+
+    !> Neighbours to atoms
+    type(TNeighbourList), intent(in) :: neighbourList
+
+    !> Map from image atom to real atoms
+    integer, intent(in) :: img2CentCell(:)
+
+    !> Spin constants
+    real(dp), intent(in), allocatable :: spinW(:,:,:)
+
+    !> Solvation mode
+    class(TSolvation), allocatable, intent(inout) :: solvation
+
+    !> Third order SCC interactions
+    type(TThirdOrder), allocatable, intent(inout) :: thirdOrd
+
+    !> Potentials acting
+    type(TPotentials), intent(inout) :: potential
+
+    !> Dispersion interactions object
+    class(TDispersionIface), allocatable, intent(inout) :: dispersion
+
+    !> Error status
+    type(TStatus), intent(out) :: errStatus
+
+    ! local variables
+    real(dp), allocatable :: atomPot(:,:)
+    real(dp), allocatable :: shellPot(:,:,:)
+    real(dp), allocatable :: dipPot(:,:), quadPot(:,:)
+    integer, pointer :: pSpecies0(:)
+    integer :: nAtom, nSpin
+
+    nAtom = size(qInput, dim=2)
+    nSpin = size(qInput, dim=3)
+    pSpecies0 => species(1:nAtom)
+
+    allocate(atomPot(nAtom, nSpin), source=0.0_dp)
+    allocate(shellPot(orb%mShell, nAtom, nSpin), source=0.0_dp)
+    if (allocated(potential%dipoleAtom)) then
+      allocate(dipPot, mold=potential%dipoleAtom)
+      dipPot(:, :) = 0.0_dp
+    end if
+    if (allocated(potential%quadrupoleAtom)) then
+      allocate(quadPot, mold=potential%quadrupoleAtom)
+      quadPot(:, :) = 0.0_dp
+    end if
+
+    if (allocated(sccCalc)) then
+      if (updateScc) then
+        call sccCalc%updateCharges(env, qInput, orb, species, q0)
+      end if
+      call sccCalc%updateShifts(env, orb, species, neighbourList%iNeighbour, img2CentCell)
+      call sccCalc%getShiftPerAtom(atomPot(:,1))
+      call sccCalc%getShiftPerL(shellPot(:,:,1))
+
+      if (allocated(potential%coulombShell)) then
+        ! need to retain the just electrostatic contributions to the potential for a contact
+        ! calculation or similar
+        potential%coulombShell(:,:,:) = shellPot(:,:,1:1)
+        call totalShift(potential%coulombShell, atomPot(:,1:1), orb, species)
+      end if
+    end if
+
+    if (allocated(dispersion)) then
+      call dispersion%updateCharges(env, pSpecies0, neighbourList, qInput, q0, img2CentCell, orb)
+      call dispersion%addPotential(atomPot(:,1))
+    end if
+
+    potential%intAtom(:,1) = potential%intAtom(:,1) + atomPot(:,1)
+    potential%intShell(:,:,1) = potential%intShell(:,:,1) + shellPot(:,:,1)
+
+    if (allocated(tblite)) then
+      call tblite%updateCharges(env, species, neighbourList, qInput, q0, &
+          & multipole%dipoleAtom, multipole%quadrupoleAtom, img2CentCell, orb)
+      call tblite%getShifts(atomPot(:,1), shellPot(:,:,1), dipPot, quadPot)
+      potential%intAtom(:,1) = potential%intAtom(:,1) + atomPot(:,1)
+      potential%intShell(:,:,1) = potential%intShell(:,:,1) + shellPot(:,:,1)
+      if (allocated(potential%dipoleAtom)) then
+        potential%dipoleAtom(:,:) = potential%dipoleAtom + dipPot
+      end if
+      if (allocated(potential%quadrupoleAtom)) then
+        potential%quadrupoleAtom(:,:) = potential%quadrupoleAtom + quadPot
+      end if
+    end if
+
+    if (allocated(thirdOrd)) then
+      call thirdOrd%updateCharges(pSpecies0, neighbourList, qInput, q0, img2CentCell, orb)
+      call thirdOrd%getShifts(atomPot(:,1), shellPot(:,:,1))
+      potential%intAtom(:,1) = potential%intAtom(:,1) + atomPot(:,1)
+      potential%intShell(:,:,1) = potential%intShell(:,:,1) + shellPot(:,:,1)
+    end if
+
+    if (allocated(solvation)) then
+      call solvation%updateCharges(env, pSpecies0, neighbourList, qInput, q0, img2CentCell, orb,&
+          & errStatus)
+      @:PROPAGATE_ERROR(errStatus)
+      call solvation%getShifts(atomPot(:,1), shellPot(:,:,1))
+      potential%intAtom(:,1) = potential%intAtom(:,1) + atomPot(:,1)
+      potential%intShell(:,:,1) = potential%intShell(:,:,1) + shellPot(:,:,1)
+    end if
+
+    if (nSpin /= 1 .and. allocated(spinW)) then
+      shellPot(:,:,:) = 0.0_dp
+      call getSpinShift(shellPot(:,:,2:), chargePerShell(:,:,2:), species, orb, spinW)
+      potential%intShell(:,:,2:) = potential%intShell(:,:,2:) + shellPot(:,:,2:)
+    end if
+
+    call totalShift(potential%intShell, potential%intAtom, orb, species)
+    call totalShift(potential%intBlock, potential%intShell, orb, species)
+
+  end subroutine addChargePotentials
+
+
+  !> Add potentials coming from on-site block of the dual density matrix.
+  subroutine addBlockChargePotentials(qBlockIn, qiBlockIn, dftbU, tImHam, species, orb, potential)
+
+    !> Block input charges
+    real(dp), allocatable, intent(in) :: qBlockIn(:,:,:,:)
+
+    !> Imaginary part
+    real(dp), allocatable, intent(in) :: qiBlockIn(:,:,:,:)
+
+    !> Is this a +U calculation
+    type(TDftbU), intent(in), allocatable :: dftbU
+
+    !> Does the hamiltonian have an imaginary part in real space?
+    logical, intent(in) :: tImHam
+
+    !> Chemical species of all atoms
+    integer, intent(in) :: species(:)
+
+    !> Orbital information
+    type(TOrbitals), intent(in) :: orb
+
+    !> Potentials acting in system
+    type(TPotentials), intent(inout) :: potential
+
+    if (allocated(dftbU)) then
+      if (tImHam) then
+        call dftbU%getDftbUShift(potential%orbitalBlock, potential%iorbitalBlock, qBlockIn,&
+            & qiBlockIn, species,orb)
+      else
+        call dftbU%getDftbUShift(potential%orbitalBlock, qBlockIn, species, orb)
+      end if
+      potential%intBlock = potential%intBlock + potential%orbitalBlock
+    end if
+
+  end subroutine addBlockChargePotentials
+
+
+  !> Returns the Hamiltonian for the given scc iteration
+  subroutine getSccHamiltonian(env, H0, ints, nNeighbourSK, neighbourList, species, orb,&
+      & iSparseStart, img2CentCell, potential, mDftb, isREKS, ham, iHam)
+
+    !> Environment settings
+    type(TEnvironment), intent(in) :: env
+
+    !> Non-SCC hamiltonian (sparse)
+    real(dp), intent(in) :: H0(:)
+
+    !> Integral container
+    type(TIntegral), intent(in) :: ints
+
+    !> Number of atomic neighbours
+    integer, intent(in) :: nNeighbourSK(:)
+
+    !> List of atomic neighbours
+    type(TNeighbourList), intent(in) :: neighbourList
+
+    !> Species of atoms
+    integer, intent(in) :: species(:)
+
+    !> Atomic orbital information
+    type(TOrbitals), intent(in) :: orb
+
+    !> Index for atomic blocks in sparse data
+    integer, intent(in) :: iSparseStart(:,:)
+
+    !> Image atoms to central cell atoms
+    integer, intent(in) :: img2CentCell(:)
+
+    !> Potential acting on system
+    type(TPotentials), intent(in) :: potential
+
+    !> DFTB multipole expansion
+    type(TMdftb), allocatable, intent(inout) :: mdftb
+
+    !> Is this DFTB/SSR formalism
+    logical, intent(in) :: isREKS
+
+    !> Resulting hamiltonian (sparse)
+    real(dp), intent(inout) :: ham(:,:)
+
+    !> Imaginary part of hamiltonian (if required, signalled by being allocated)
+    real(dp), allocatable, intent(inout) :: iHam(:,:)
+
+    integer :: nAtom
+    real(dp), allocatable :: atomFieldDeriv(:,:)
+
+    nAtom = size(orb%nOrbAtom)
+
+    if (.not. isREKS) then
+      ham(:,:) = 0.0_dp
+    end if
+
+    call addShift(env, ham, ints%overlap, nNeighbourSK, neighbourList%iNeighbour, species, orb,&
+        & iSparseStart, nAtom, img2CentCell, potential%intBlock, .not. isREKS)
+
+    if (.not. isREKS) then
+      ham(:,1) = ham(:,1) + h0
+    end if
+
+    ! Field
+    if (allocated(potential%intOnSiteAtom)) then
+      call addOnSiteShift(ham, ints%overlap, species, orb, iSparseStart, nAtom,&
+          & potential%intOnSiteAtom)
+    end if
+    if (allocated(potential%extOnSiteAtom)) then
+      call addOnSiteShift(ham, ints%overlap, species, orb, iSparseStart, nAtom,&
+          & potential%extOnSiteAtom)
+    end if
+
+    ! Field first derivative (gradient / dipole)
+    if (allocated(potential%dipoleAtom)) then
+      atomFieldDeriv = potential%dipoleAtom
+    end if
+    if (allocated(potential%extDipoleAtom)) then
+      if (allocated(atomFieldDeriv)) then
+        atomFieldDeriv(:,:) = atomFieldDeriv + potential%extDipoleAtom
+      else
+        atomFieldDeriv = potential%extDipoleAtom
+      end if
+    end if
+    if (allocated(atomFieldDeriv)) then
+      call addAtomicMultipoleShift(ham, ints%dipoleBra, ints%dipoleKet, nNeighbourSK,&
+        & neighbourList%iNeighbour, species, orb, iSparseStart, nAtom, img2CentCell,&
+        & atomFieldDeriv)
+      deallocate(atomFieldDeriv)
+    end if
+
+    ! Field second derivative (quadrupole)
+    if (allocated(potential%quadrupoleAtom)) then
+      atomFieldDeriv = potential%quadrupoleAtom
+    end if
+    if (allocated(potential%extQuadrupoleAtom)) then
+      if (allocated(atomFieldDeriv)) then
+        atomFieldDeriv(:,:) = atomFieldDeriv + potential%extQuadrupoleAtom
+      else
+        atomFieldDeriv = potential%extQuadrupoleAtom
+      end if
+    end if
+    if (allocated(atomFieldDeriv)) then
+      call addAtomicMultipoleShift(ham, ints%quadrupoleBra, ints%quadrupoleKet, nNeighbourSK,&
+          & neighbourList%iNeighbour, species, orb, iSparseStart, nAtom, img2CentCell,&
+          & atomFieldDeriv)
+      deallocate(atomFieldDeriv)
+    end if
+
+    if (allocated(mdftb)) then
+      call mdftb%addMultiExpanHamiltonian(ham, ints%overlap, nNeighbourSK,&
+          & neighbourList%iNeighbour, species, orb, iSparseStart, nAtom, img2CentCell)
+    end if
+
+    if (allocated(iHam)) then
+      iHam(:,:) = 0.0_dp
+      call addShift(env, iHam, ints%overlap, nNeighbourSK, neighbourList%iNeighbour, species, orb,&
+          & iSparseStart, nAtom, img2CentCell, potential%iorbitalBlock, .true.)
+    end if
+
+  end subroutine getSccHamiltonian
+
+
+  !> Adds shift due to electronic constraints to SCC Hamiltonian.
+  subroutine constrainSccHamiltonian(env, ints, nNeighbourSK, neighbourList, species, orb,&
+      & iSparseStart, img2CentCell, constrShift)
+
+    !> Computational environment settings
+    type(TEnvironment), intent(in) :: env
+
+    !> Integral container
+    type(TIntegral), intent(inout) :: ints
+
+    !> Number of atomic neighbours
+    integer, intent(in) :: nNeighbourSK(:)
+
+    !> List of atomic neighbours
+    type(TNeighbourList), intent(in) :: neighbourList
+
+    !> Species of atoms
+    integer, intent(in) :: species(:)
+
+    !> Atomic orbital information
+    type(TOrbitals), intent(in) :: orb
+
+    !> Index for atomic blocks in sparse data
+    integer, intent(in) :: iSparseStart(:,:)
+
+    !> Image atoms to central cell atoms
+    integer, intent(in) :: img2CentCell(:)
+
+    !> Shift due to electronic constraints
+    real(dp), intent(in) :: constrShift(:,:,:,:)
+
+    !! Number of atoms in central cell
+    integer :: nAtom
+
+    nAtom = size(orb%nOrbAtom)
+
+    call addShift(env, ints%hamiltonian, ints%overlap, nNeighbourSK, neighbourList%iNeighbour,&
+        & species, orb, iSparseStart, nAtom, img2CentCell, constrShift, .false.)
+
+  end subroutine constrainSccHamiltonian
+
+end module dftbp_dftb_hamiltonian

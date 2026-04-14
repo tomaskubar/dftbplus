@@ -37,21 +37,29 @@ contributed to DFTB+ :
 * Adriel Garcia Dominguez (Max Planck Institute for the Structure and Dynamics
   of Matter, Germany)
 
+* Roberto Andrés González-León (University of Costa Rica)
+
 * Sebastian Ehlert (University of Bonn, Germany)
+
+* Tammo van der Heide (University of Bremen, Germany)
 
 * Jan Hermann (Free University of Berlin, Germany)
 
+* Jacek Jakowski (Oak Ridge National Laboratory, USA)
+
+* Eisuke Kawashima (RIKEN, Japan)
+
 * Tim Kowalczyk (Western Washington University)
 
-* In Seong Lee (Ulsan National Institute of Science and Technology, Repubic of Korea)
-
-* In Seong Lee (Ulsan National Institute of Science and Technology, Repubic of
+* In Seong Lee (Ulsan National Institute of Science and Technology, Republic of
   Korea)
 
 * Reinhard Maurer (University of Warwick, UK)
 
+* Tobias Melson (Max Planck Computing and Data Facility, Germany)
+
 * Izaac Mitchell (University of Newcastle, Australia)
-  
+
 * Thomas Niehaus (University of Lyon, France)
 
 * Alessandro Pecchia (University of Rome "Tor Vergata", Italy)
@@ -61,8 +69,10 @@ contributed to DFTB+ :
 
 * Jan Řezáč (Institute of Organic Chemistry and Biochemistry AS CR, Czech
   Republic)
-  
+
 * Cristián G. Sánchez (Universidad Nacional de Cuyo, Argentina)
+
+* Miguel Steiner (ETH Zurich, Switzerland)
 
 * Michael Sternberg (Argonne National Laboratory, USA)
 

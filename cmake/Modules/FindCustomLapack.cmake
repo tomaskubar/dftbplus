@@ -1,6 +1,6 @@
 # Distributed under the OSI-approved BSD 2-Clause License.
 #
-# Copyright (C) 2020 DFTB+ developers group
+# Copyright (C) 2025  DFTB+ developers group
 #
 
 #[=======================================================================[.rst:
@@ -111,15 +111,16 @@ else()
   set(LAPACK_FOUND ${CUSTOMLAPACK_FOUND})
   set(Lapack_FOUND ${CUSTOMLAPACK_FOUND})
 
-
-  if(LAPACK_FOUND AND NOT TARGET LAPACK::LAPACK)
-
+  if (LAPACK_FOUND AND NOT TARGET LAPACK::LAPACK)
     add_library(LAPACK::LAPACK INTERFACE IMPORTED)
     if(NOT "${LAPACK_LIBRARY}" STREQUAL "NONE")
       target_link_libraries(LAPACK::LAPACK INTERFACE "${LAPACK_LIBRARY}")
     endif()
     if(NOT "${LAPACK_LINKER_FLAG}" STREQUAL "")
       target_link_options(LAPACK::LAPACK INTERFACE "${LAPACK_LINKER_FLAG}")
+    endif()
+    if(TARGET BLAS::BLAS)
+      target_link_libraries(LAPACK::LAPACK INTERFACE BLAS::BLAS)
     endif()
   endif()
 

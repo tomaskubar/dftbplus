@@ -18,16 +18,21 @@
 #
 # Fortran compiler settings
 #
-set(Fortran_FLAGS "-standard-semantics ${CMAKE_Fortran_FLAGS}"
-  CACHE STRING "Build type independent Fortran compiler flags")
-
-set(Fortran_FLAGS_RELEASE "-O2 -ip"
-  CACHE STRING "Fortran compiler flags for Release build")
+if("${CMAKE_Fortran_COMPILER_ID}" MATCHES "IntelLLVM")
+  set(Fortran_FLAGS_RELEASE "-O2"
+    CACHE STRING "Fortran compiler flags for Release build")
+else()
+  set(Fortran_FLAGS_RELEASE "-O2 -ip"
+    CACHE STRING "Fortran compiler flags for Release build")
+endif()
 
 set(Fortran_FLAGS_RELWITHDEBINFO "-g ${Fortran_FLAGS_RELEASE}"
   CACHE STRING "Fortran compiler flags for Release build")
 
-set(Fortran_FLAGS_DEBUG "-g -warn all -stand f08 -check -diag-error-limit 1 -traceback"
+# Note: uninit only works reliably if all linked libraries were compiled using this flag
+# Note: boundary violation check is broken in ifx 2025.0
+# (https://community.intel.com/t5/Intel-Fortran-Compiler/Compiler-bug-boundary-check-triggering-false-positives/m-p/1664953#M175032)
+set(Fortran_FLAGS_DEBUG "-g -O0 -warn all -stand f18 -check all,nouninit,nobounds -diag-error-limit 1 -traceback"
   CACHE STRING "Fortran compiler flags for Debug build")
 
 # Use intrinsic Fortran 2008 erf/erfc functions
@@ -42,8 +47,13 @@ set(FYPP_FLAGS "" CACHE STRING "Flags for the preprocessor")
 set(C_FLAGS "${CMAKE_C_FLAGS}"
   CACHE STRING "Build type independent C compiler flags")
 
-set(C_FLAGS_RELEASE "-O2 -ip"
-  CACHE STRING  "C compiler flags for Release build")
+if("${CMAKE_C_COMPILER_ID}" MATCHES "IntelLLVM")
+  set(C_FLAGS_RELEASE "-O2"
+    CACHE STRING  "C compiler flags for Release build")
+else()
+  set(C_FLAGS_RELEASE "-O2 -ip"
+    CACHE STRING  "C compiler flags for Release build")
+endif()
 
 set(C_FLAGS_DEBUG "-g -Wall"
   CACHE STRING "C compiler flags for Debug build")
@@ -59,20 +69,49 @@ set(C_FLAGS_DEBUG "-g -Wall"
 # sure your CMAKE_PREFIX_PATH variable is set up accordingly.
 
 # LAPACK and BLAS
-if(WITH_OMP)
-  set(LAPACK_LIBRARY "mkl_intel_lp64;mkl_intel_thread;mkl_core" CACHE STRING
-    "LAPACK and BLAS libraries to link")
-else()
-  set(LAPACK_LIBRARY "mkl_intel_lp64;mkl_sequential;mkl_core" CACHE STRING
-    "LAPACK and BLAS libraries to link")
+# (if the BLAS library contains the LAPACK functions, set LAPACK_LIBRARY to "NONE")
+
+# if(WITH_OMP)
+#   set(BLAS_LIBRARY "mkl_intel_lp64;mkl_intel_thread;mkl_core" CACHE STRING "BLAS library to link")
+# else()
+#   set(BLAS_LIBRARY "mkl_intel_lp64;mkl_sequential;mkl_core" CACHE STRING "BLAS libraries to link")
+# endif()
+# set(BLAS_LIBRARY_DIR "$ENV{MKLROOT}/lib/intel64" CACHE STRING
+#     "Directories where BLAS libraries can be found")
+
+# Automatic CMake LAPACK/BLAS finder settings. If they don't work out, you may try to use the
+# manual settings above instead.
+if ("${BLAS_LIBRARY}" STREQUAL "")
+  # In order to load the library via dlopen() in Python, special MKL library must be linked.
+  if(BUILD_SHARED_LIBS AND ENABLE_DYNAMIC_LOADING)
+    if(WITH_MPI)
+      message(FATAL_ERROR
+        "Don't know how to link MKL as shared library with MPI and dlopen (Python API) support. "
+        "Set BLAS_LIBRARY, LAPACK_LIBRARY and SCALAPACK_LIBRARY manually, if you know how.")
+    endif()
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.17")
+      set(BLA_VENDOR Intel10_64_dyn)
+    else()
+      set(BLAS_LIBRARY "mkl_rt")
+      set(BLAS_LIBRARY_DIR "$ENV{MKLROOT}/lib/intel64" CACHE STRING
+        "Directories where BLAS libraries can be found")
+    endif()
+  elseif(WITH_OMP)
+    set(BLA_VENDOR Intel10_64lp)
+  else()
+    set(BLA_VENDOR Intel10_64lp_seq)
+  endif()
 endif()
 
-set(LAPACK_LIBRARY_DIR "$ENV{MKLROOT}/lib/intel64" CACHE STRING
-  "Directories where LAPACK and BLAS libraries can be found")
+#set(LAPACK_LIBRARY_DIR "$ENV{MKLROOT}/lib/intel64" CACHE STRING
+#    "Directories where LAPACK libraries can be found")
+set(LAPACK_LIBRARY "NONE")
 
 # ARPACK -- only needed when built with ARPACK support
-#set(ARPACK_LIBRARY "arpack" CACHE STRING "Arpack library")
-#set(ARPACK_LIBRARY_DIR "" CACHE STRING "Directories where Arpack library can be found")
+#set(ARPACK_LIBRARY "arpack" CACHE STRING "ARPACK library (with path if necessary)")
+
+# PARPACK -- only needed when built with ARPACK and MPI support
+#set(PARPACK_LIBRARY "parpack" CACHE STRING "PARPACK library (with path if necessary)")
 
 # ScaLAPACK -- only needed for MPI-parallel build
 set(SCALAPACK_LIBRARY "mkl_scalapack_lp64;mkl_blacs_intelmpi_lp64" CACHE STRING
