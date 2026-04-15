@@ -71,6 +71,7 @@ int main() {
 
   DftbPlus calculator;
   DftbPlusInput input;
+  DftbPlusAtomList dummyAtomList;
 
   /* Coordinates in row major format, atomic units */
   double coords_h2o[] = {
@@ -86,10 +87,12 @@ int main() {
   _Bool instsafe = dftbp_is_instance_safe();
   printf(instsafe ? "API is instance safe\n" : "API is NOT instance safe\n");
 
+  dummyAtomList.pDftbPlusAtomList = NULL;
+
   /* Initialize DFTB+ input tree from input in external file */
   dftbp_init(&calculator, NULL);
   dftbp_get_input_from_file(&calculator, "dftb_in.h2o.hsd", &input);
-  dftbp_process_input(&calculator, &input);
+  dftbp_process_input(&calculator, &input, &dummyAtomList);
 
   int natom = dftbp_get_nr_atoms(&calculator);
   fprintf(atf, "natom       :integer:0:\n%d\n", natom);

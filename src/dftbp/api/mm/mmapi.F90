@@ -458,7 +458,7 @@ contains
 
 
   !> Sets up the calculator using a given input.
-  subroutine TDftbPlus_setupCalculator(this, input)
+  subroutine TDftbPlus_setupCalculator(this, input, atomList)
 
     !> Instance.
     class(TDftbPlus), target, intent(inout) :: this
@@ -466,10 +466,17 @@ contains
     !> Representation of the DFTB+ input.
     type(TDftbPlusInput), intent(inout) :: input
 
+    !> List of atoms and species for the QM region.
+    type(TDftbPlusAtomList), intent(inout), optional :: atomList
+
     type(TParserFlags) :: parserFlags
     type(TInputData) :: inpData
 
     call this%checkInit()
+
+    if (present(atomList)) then
+      call atomList%add(inpData)
+    end if
 
     call parseHsdTree(input%hsdTree, inpData, parserFlags)
     call doPostParseJobs(input%hsdTree, parserFlags)

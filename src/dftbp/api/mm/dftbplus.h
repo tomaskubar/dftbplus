@@ -231,6 +231,13 @@ void dftbp_final(DftbPlus *instance);
 
 
 /**
+ * Obtain no. of atoms and list of species from the MM program
+ */
+void dftbp_get_atom_list(DftbPlusAtomList *atomListHandler, int *nAtomC, int *nSpeciesC,
+                         char *elementC, int *species);
+
+
+/**
  * Fills up a DFTB+ input tree from a HSD input file.
  *
  * \param[inout] instance Handler of the DFTB+ instance.
@@ -249,8 +256,11 @@ void dftbp_get_input_from_file(DftbPlus *instance, const char *filename, DftbPlu
  *
  * \param[inout] input The tree containing the DFTB+ input. On return, it contains the tree
  *     extended by all the default options set by the parser.
+ * 
+ * \param[inout] atomListHandler Handler containing the list of atoms and species. DFTB+ needs it to
+ *     set up the calculator, e.g. to know which parameters to use.
  */
-void dftbp_process_input(DftbPlus *instance, DftbPlusInput *input);
+void dftbp_process_input(DftbPlus *instance, DftbPlusInput *input, DftbPlusAtomList *atomListHandler);
 
 
 /**

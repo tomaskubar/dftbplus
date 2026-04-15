@@ -18,15 +18,18 @@ int main()
 {
   DftbPlus calculator;
   DftbPlusInput input;
+  DftbPlusAtomList dummyAtomList;
 
   int major, minor, patch;
   dftbp_api(&major, &minor, &patch);
   printf("API version %d.%d.%d\n", major, minor, patch);
 
+  dummyAtomList.pDftbPlusAtomList = NULL;
+
   dftbp_init(&calculator, NULL);
 
   dftbp_get_input_from_file(&calculator, "dftb_in.hsd", &input);
-  dftbp_process_input(&calculator, &input);
+  dftbp_process_input(&calculator, &input, &dummyAtomList);
   dftbp_input_final(&input);
 
   // setup all data for the neighbour list
