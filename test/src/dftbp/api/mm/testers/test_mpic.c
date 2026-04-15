@@ -49,8 +49,11 @@ int main(int argc, char** argv) {
 
   // Symmetrically initialise from an input file
   DftbPlusInput input;
+  DftbPlusAtomList dummyAtomList;
+  dummyAtomList.pDftbPlusAtomList = NULL;
+
   dftbp_get_input_from_file(&calculator, "dftb_in.hsd", &input);
-  dftbp_process_input(&calculator, &input);
+  dftbp_process_input(&calculator, &input, &dummyAtomList);
   dftbp_input_final(&input);
 
   // Evaluate energy and forces

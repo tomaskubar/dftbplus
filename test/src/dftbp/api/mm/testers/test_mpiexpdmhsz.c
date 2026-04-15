@@ -101,8 +101,10 @@ int main(int argc, char *argv[]) {
 
   dftbp_init_mpi(&calculator, NULL, f_mpi_comm);
   DftbPlusInput input;
+  DftbPlusAtomList dummyAtomList;
+  dummyAtomList.pDftbPlusAtomList = NULL;
   dftbp_get_input_from_file(&calculator, "dftb_in.hsd", &input);
-  dftbp_process_input(&calculator, &input);
+  dftbp_process_input(&calculator, &input, &dummyAtomList);
   blacs_pinfo_(&mypnum, &nprocs);
 
   int natom = dftbp_get_nr_atoms(&calculator);
