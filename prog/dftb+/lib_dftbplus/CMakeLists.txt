@@ -3,6 +3,8 @@ set(curdir "lib_dftbplus")
 set(sources-fpp
   ${curdir}/eigenvects.F90
   ${curdir}/elstattypes.F90
+  ${curdir}/dm.F90
+  ${curdir}/edm.F90
   ${curdir}/fmo.F90
   ${curdir}/fmogradient.F90
   ${curdir}/forcetypes.F90
