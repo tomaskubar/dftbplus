@@ -28,7 +28,7 @@ set(Fortran_FLAGS "${CMAKE_Fortran_FLAGS}"
 set(Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE}"
   CACHE STRING "Fortran compiler flags for Release build")
 
-set(Fortran_FLAGS_RELWITHDEBINFO "${Fortran_FLAGS_RELWITHDEBINFO}"
+set(Fortran_FLAGS_RELWITHDEBINFO "${CMAKE_Fortran_FLAGS_RELWITHDEBINFO}"
   CACHE STRING "Fortran compiler flags for Release build")
 
 set(Fortran_FLAGS_DEBUG "${CMAKE_Fortran_FLAGS_DEBUG}"
@@ -69,8 +69,10 @@ set(C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}"
 #  "Directories where LAPACK and BLAS libraries can be found")
 
 # ARPACK -- only needed when built with ARPACK support
-#set(ARPACK_LIBRARY "arpack" CACHE STRING "Arpack libraries")
-#set(ARPACK_LIBRARY_DIR "" CACHE STRING "Directories where Arpack library can be found")
+#set(ARPACK_LIBRARY "arpack" CACHE STRING "ARPACK library (with path if necessary)")
+
+# PARPACK -- only needed when built with ARPACK and MPI support
+#set(PARPACK_LIBRARY "parpack" CACHE STRING "PARPACK library (with path if necessary)")
 
 # ScaLAPACK -- only needed for MPI-parallel build
 #set(SCALAPACK_LIBRARY "scalapack" CACHE STRING "Scalapack libraries to link")

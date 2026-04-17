@@ -17,7 +17,8 @@
 #
 # Fortran compiler settings
 #
-set(Fortran_FLAGS "-ieee=full -maxcontin=512 ${CMAKE_Fortran_FLAGS}"
+# -mismatch is necessary as libmbd calls LAPACK routines with incompatible signature
+set(Fortran_FLAGS "-ieee=full -mismatch -maxcontin=512 ${CMAKE_Fortran_FLAGS}"
   CACHE STRING "Build type independent Fortran compiler flags")
 
 set(Fortran_FLAGS_RELEASE "-O2"
@@ -26,7 +27,7 @@ set(Fortran_FLAGS_RELEASE "-O2"
 set(Fortran_FLAGS_RELWITHDEBINFO "-g ${Fortran_FLAGS_RELEASE}"
   CACHE STRING "Fortran compiler flags for Release build")
 
-set(Fortran_FLAGS_DEBUG "-g -f2008 -nan -C=all"
+set(Fortran_FLAGS_DEBUG "-g -f2018 -nan -C=all"
   CACHE STRING "Fortran compiler flags for Debug build")
 
 # Use intrinsic Fortran 2008 erf/erfc functions
@@ -58,13 +59,17 @@ set(C_FLAGS_DEBUG "-g -Wall -pedantic -fbounds-check"
 # sure your CMAKE_PREFIX_PATH variable is set up accordingly.
 
 # LAPACK and BLAS
-#set(LAPACK_LIBRARY "openblas" CACHE STRING "LAPACK and BLAS libraries to link")
-#set(LAPACK_LIBRARY_DIR "" CACHE STRING
-#  "Directories where LAPACK and BLAS libraries can be found")
+# (if the BLAS library contains the LAPACK functions, set LAPACK_LIBRARY to "NONE")
+#set(BLAS_LIBRARY "openblas" CACHE STRING "BLAS libraries to link")
+#set(BLAS_LIBRARY_DIR "" CACHE STRING "Directories where BLAS libraries can be found")
+#set(LAPACK_LIBRARY "NONE" CACHE STRING "LAPACK libraries to link")
+#set(LAPACK_LIBRARY_DIR "" CACHE STRING "Directories where LAPACK libraries can be found")
 
 # ARPACK -- only needed when built with ARPACK support
-#set(ARPACK_LIBRARY "arpack" CACHE STRING "Arpack library")
-#set(ARPACK_LIBRARY_DIR "" CACHE STRING "Directories where Arpack library can be found")
+#set(ARPACK_LIBRARY "arpack" CACHE STRING "ARPACK library (with path if necessary)")
+
+# PARPACK -- only needed when built with ARPACK and MPI support
+#set(PARPACK_LIBRARY "parpack" CACHE STRING "PARPACK library (with path if necessary)")
 
 # ScaLAPACK -- only needed for MPI-parallel build
 #set(SCALAPACK_LIBRARY "scalapack" CACHE STRING "Scalapack libraries to link")

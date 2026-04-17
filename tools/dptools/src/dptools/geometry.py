@@ -1,6 +1,6 @@
 #------------------------------------------------------------------------------#
 #  DFTB+: general package for performing fast atomistic simulations            #
-#  Copyright (C) 2006 - 2020  DFTB+ developers group                           #
+#  Copyright (C) 2006 - 2025  DFTB+ developers group                           #
 #                                                                              #
 #  See the LICENSE file for terms of usage and distribution.                   #
 #------------------------------------------------------------------------------#
@@ -35,7 +35,7 @@ class Geometry:
         """Initializes a geometry object.
 
         Args:
-            specienames: Names of the species occuring in the geometry.
+            specienames: Names of the species occurring in the geometry.
             indexes: Species index for every atom. Shape (natom,)
             coords: Coordinates of the atoms.
             latvecs: Lattice vectors (default: None, non-periodic modell).
@@ -131,7 +131,7 @@ def get_latvecs_fromcif(celllengths, cellangles):
     * celllengths[1]
     trig_term = (np.cos(cellangles[0]) - np.cos(cellangles[2]) * np.cos(cellangles[1])) \
     /np.sin(cellangles[2])
-    latvecs[2, :] = np.array([np.cos(cellangles[1]), trig_term, \
+    latvecs[2, :] = np.array([np.cos(cellangles[1]), trig_term,
     np.sqrt(1 - np.cos(cellangles[1])**2 - trig_term**2)], dtype=float) * celllengths[2]
 
     return latvecs

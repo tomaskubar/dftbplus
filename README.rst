@@ -18,16 +18,39 @@ software packages as a library.
 Installation
 ============
 
+Obtaining via Conda
+-------------------
 
-Downloading the binary distribution
------------------------------------
+The preferred way of to install DFTB+ is by using the conda package management
+system. We highly suggest using the `miniforge
+<https://github.com/conda-forge/miniforge>`_ conda distribution. You might use
+any other conda distribution as well, just make sure to select the `conda-forge
+<https://conda-forge.org/>`_ channel as the (only) source for packages.
 
-Binary (threaded) distribution of the latest stable release can be found on the
-`stable release page <http://www.dftbplus.org/download/dftb-stable/>`_.
+We provide several build variants, choose the one suiting your needs. For
+example, by issuing ::
 
-Alternatively, you can also install DFTB+ via the `Anaconda package management
-<https://www.anaconda.com/products/individual>`_ framework. (This feature is
-currently experimental.)
+  conda install 'dftbplus=*=nompi_*'
+
+or ::
+
+  conda install 'dftbplus=*=mpi_mpich_*'
+
+or ::
+
+  conda install 'dftbplus=*=mpi_openmpi_*'
+
+to get the last stable release of DFTB+ with, respectively, serial
+(OpenMP-threaded) build or with MPI-parallelized build using either the MPICH or
+the Open MPI framework.
+
+
+Downloading the binary
+----------------------
+
+A non-MPI (OpenMP-threaded) distribution of the latest stable release can be
+found on the `stable release page
+<http://www.dftbplus.org/download/stable.html>`_.
 
 
 Building from source
@@ -40,7 +63,7 @@ build process, consult the **detailed building instructions** in `INSTALL.rst
 <INSTALL.rst>`_.
 
 Download the source code from the `stable release page
-<http://www.dftbplus.org/download/dftb-stable/>`_.
+<http://www.dftbplus.org/download/stable.html>`_.
 
 You need CMake (>= 3.16) to build DFTB+. If your environment offers no CMake or
 only an older one, you can easily install the latest CMake via Python's ``pip``
@@ -50,7 +73,7 @@ command::
 
 Start CMake by passing your compilers as environment variables (``FC`` and
 ``CC``), and the location where the code should be installed and the build
-directory (``_build``) and als options::
+directory (``_build``) as options::
 
   FC=gfortran CC=gcc cmake -DCMAKE_INSTALL_PREFIX=$HOME/opt/dftb+ -B _build .
 
@@ -58,10 +81,15 @@ If the configuration was successful, start the build with::
 
   cmake --build _build -- -j
 
-After successful build, you should test the code. First download the SK-files
+After successful build, you should test the code. First download the files
 needed for the test ::
 
   ./utils/get_opt_externals slakos
+  ./utils/get_opt_externals gbsa
+
+or ::
+
+  ./utils/get_opt_externals ALL
 
 and then run the tests with ::
 
@@ -91,7 +119,7 @@ Consult following resources for documentation:
   <http://dftbplus-recipes.readthedocs.io/>`_
 
 * `Reference manual describing all features (DFTB+ Manual)
-  <http://www.dftbplus.org/fileadmin/DFTBPLUS/public/dftbplus/latest/manual.pdf>`_
+  <https://github.com/dftbplus/dftbplus/releases/latest/download/manual.pdf>`_
 
 
 Citing
@@ -107,9 +135,9 @@ When publishing results obtained with DFTB+, please cite following works:
   used. (See `dftb.org <https://dftb.org>`_ for the references.)
 
 * Methodological papers relevant to your calculations (e.g. excited states,
-  electron-transport, third order DFTB etc.). Those references can be found in
-  the `DFTB+ manual
-  <http://www.dftbplus.org/fileadmin/DFTBPLUS/public/dftbplus/latest/manual.pdf>`_.
+  electron-transport, third order DFTB etc.). References to these can be found
+  in the `DFTB+ manual
+  <https://github.com/dftbplus/dftbplus/releases/latest/download/manual.pdf>`_.
 
 
 Contributing
@@ -133,12 +161,12 @@ DFTB+ is released under the GNU Lesser General Public License. See the included
 
 
 
-.. |DFTB+ logo| image:: https://www.dftbplus.org/fileadmin/DFTBPLUS/images/DFTB-Plus-Icon_06_f_150x150.png
+.. |DFTB+ logo| image:: https://www.dftbplus.org/_assets/DFTB-Plus-Icon_06_f_150x150.png
     :alt: DFTB+ website
     :scale: 100%
     :target: https://dftbplus.org/
 
-.. |lgpl badge| image:: http://www.dftbplus.org/fileadmin/DFTBPLUS/images/license-GNU-LGPLv3-blue.svg
+.. |lgpl badge| image:: http://www.dftbplus.org/_assets/license-GNU-LGPLv3-blue.svg
     :alt: LGPL v3.0
     :scale: 100%
     :target: https://opensource.org/licenses/LGPL-3.0
