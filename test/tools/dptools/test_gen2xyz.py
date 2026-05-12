@@ -1,6 +1,6 @@
 #------------------------------------------------------------------------------#
 #  DFTB+: general package for performing fast atomistic simulations            #
-#  Copyright (C) 2006 - 2020  DFTB+ developers group                           #
+#  Copyright (C) 2006 - 2025  DFTB+ developers group                           #
 #                                                                              #
 #  See the LICENSE file for terms of usage and distribution.                   #
 #------------------------------------------------------------------------------#
@@ -54,7 +54,7 @@ class Gen2xyzTest(common.TestWithWorkDir):
         cmdargs = ['-o', outfile, '-c', "something", infile]
         gen2xyz.main(cmdargs)
         self.assertTrue(common.xyz_file_equals(outfile, reffile))
-        self.assertFalse(common.xyz_file_equals(outfile, reffile,\
+        self.assertFalse(common.xyz_file_equals(outfile, reffile,
                          check_comment=True))
 
     def test_fail_invalid_infile(self):
