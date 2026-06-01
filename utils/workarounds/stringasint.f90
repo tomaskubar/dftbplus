@@ -1,3 +1,10 @@
+!--------------------------------------------------------------------------------------------------!
+!  DFTB+: general package for performing fast atomistic simulations                                !
+!  Copyright (C) 2006 - 2025  DFTB+ developers group                                               !
+!                                                                                                  !
+!  See the LICENSE file for terms of usage and distribution.                                       !
+!--------------------------------------------------------------------------------------------------!
+
 ! PGI compilers interprets strings starting with with 'T' or 'F' as valid integers at read.
 !
 ! Known to fail:
@@ -36,7 +43,7 @@ contains
   end subroutine testWorkaround
 
 
-  !> Cheks whether a given character represents a valid staring character for an integer.
+  !> Checks whether a given character represents a valid staring character for an integer.
   pure function validIntegerStart(char) result(tValid)
 
     !> Character to check

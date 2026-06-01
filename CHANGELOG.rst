@@ -5,19 +5,347 @@ Change Log
 Notable project changes since release 1.3.1 (2017-02-22).
 
 
-Unreleased
-==========
+25.1 (2025-12-18)
+=================
 
 Added
 -----
+
+- MPI-parallelization of Waveplot
+
+- Generalization of mixers to also handle complex density matrices
+
+- General range-separated, long-range corrected CAM hybrid functionals for
+  ground-state periodic systems (MPI-parallel Fock-type exchange and energy
+  gradient construction by neighbour-list and matrix-multiplication based
+  algorithms)
+
+- Generalization of non-periodic, ground-state LC-DFTB Hamiltonian to general
+  range-separated, long-range corrected CAM hybrid functionals
+  (MPI-parallelization of matrix-multiplication based Fock-type exchange
+  construction, MPI-parallel matrix-multiplication based energy gradient
+  evaluation, restart of matrix-multiplication based hybrid-DFTB calculations)
+
+- Hybrid functionals for (molecular) non-collinear spin groundstate
+
+- Electronic constraints on arbitrary regions, targeting the electronic ground
+  state by determining a self-consistent constraint potential (restricted to
+  Mulliken populations at the moment)
+
+- Density Matrix construction on GPU using MAGMA-BLAS routines
+
+- More control over output of data and band structures during MD calculations.
+  By default, requesting printing of atomic charges, energies or forces in the
+  input leads them to also be included in the md.out file.
+
+- Printing of atom-resolved dispersion energies in detailed.out
+
+- MAGMA GPU accelerated solver for the modes code
+
+- Explicit keyword for gaussian electron temperature smearing (MP order 0)
+
+- Linear response derivatives for atom positions (DFTB1/DFTB2 only) for cluster
+  boundary conditions in low symmetry (non-degenerate) systems (and currently
+  not MPI parallel)
+
+- Addition of developer documentation for code internals in doc/dftb+/code/
+
+- Optional GPU acceleration for the modes code via the MAGMA library and support
+  for the divide and conquer and relatively robust LAPACK solvers
+
+- ASI interface for accessing H, S and density matrix
 
 
 Changed
 -------
 
+- Components of xtb energies are now resolved
+
+- Use least squares solution instead of inversion for XLBOMD force corrections
+
+- Raise error if a non-SCC calculation is using hybrid functionals
+
+- Raise a warning if neither the input of parser version is set in the input
+
+- Degeneracy tolerance for perturbation theory switched to absolute tolerance of
+  differences between eigenvalues.
+
 
 Fixed
 -----
+
+- Incorrect superposition of atomic densities written by Waveplot
+
+- SK-file parser extra-/spline-tag sequence dependent
+
+- Incorrect excited gradients for spin-polarized long-range corrected
+  linear-response TD-DFTB calculations.
+
+- Temporarily remove free energy for Delta-DFTB calculations, as this is not
+  formally derived in the general case.
+
+- DeltaDFTB purified forces used correctly.
+
+- COSMO solvent models had a bug leading to the energy showing a dependence on
+  the ordering of the atoms in the system.
+
+- The GBSA model had a bug, leading to differences for various GFN models from
+  xTB results (also affects DFTB hamiltonians).
+
+- Solvents where RadiiScaling was specified with a unit conversion were scaled
+  by the square of the conversion. Affects calculations using constructs of the
+  form: Radii = * [AA] = {} where * is Values, vanDerWaalsRadiiBondi
+  vanDerWaalsRadiiCosmo or vanDerWaalsRadiiD3
+
+- Corrected the order of Methfessel-Paxton filling. It was producing filling
+  that was 1 order lower than the one requested in the input. This is probably
+  safe in most applications, the lowest order beyond Gauss smearing (0th order)
+  is default for several other codes and already has linear and quadratic
+  independence of the free energy wrt temperature. Default for Methfessel-Paxton
+  smearing is now set to 1 (matching the results from the old default value).
+
+- Remove duplicate printing of internal energy in results.tag
+
+- Correct testing for incompatible Poisson boundary overrides when only one side
+  of the box is marked as periodic
+
+- Geometry error for periodic structures with open boundary contacts
+
+- Enable CI test cases and fix a parser bug
+
+- Fix backward compatibility bug from release 22.2 which led to dftb_pin.hsd
+  files containing obsolete keywords
+
+
+24.1 (2024-02-12)
+=================
+
+Added
+-----
+
+- CI optimizer to locate conical intersections
+
+
+Fixed
+-----
+
+- Memory leak for MPI enabled code with many geometric steps.
+
+- API call to setExternalCharges was not marking calculation to be re-evaluated.
+
+- Calls to setExternalCharges were failing if number of external charges changes.
+
+
+23.1 (2023-07-05)
+=================
+
+Added
+-----
+
+- Non-adiabatic coupling vectors for linear response calculations
+
+- Hellmann-Feynman testing for the xTB hamiltonian dipoles
+
+- Born charges and derivatives can now be calculated for a subset of the desired
+  atoms (similar to the Hessian).
+
+
+Changed
+-------
+
+- Binary output is done using stream I/O to enable processing of those files in
+  Python or C. The BinaryAccessTypes option can be used to restore the old
+  (compiler dependent) sequential I/O.
+
+
+Fixed
+-----
+
+- Tool dp_dos produced obviously incorrect results for Pauli-Hamiltonians (e.g.
+  when using spin-orbit coupling). Other Hamiltonians were not affected.
+
+
+22.2 (2022-12-20)
+=================
+
+Added
+-----
+
+- Born charges and polarizability derivatives from finite difference
+  derivatives.
+
+- Infrared and Raman intensities from the modes code.
+
+- Spin-orbit coupling for xTB
+
+- Dual American and British English spelling for various input keywords
+
+
+Fixed
+-----
+
+- Onsite and +U potentials in real time-propagation, which was broken
+  in October 2019 by commit 11abba39b
+
+- Corrected units for electrostatic gate potentials in transport
+
+- Stratmann solver available without ARPACK
+
+
+22.1 (2022-05-25)
+=================
+
+Added
+-----
+
+- Real time electronic dynamics for xTB Hamiltonian
+
+- Real time electronic dynamics for range separated DFTB
+
+- Support for MPI-parallel GPU accelerated calculations via ELPA/ELSI library
+
+- (Optionally) rescale externally applied fields and dipole moments
+  when implicit solvents are used
+
+- Enable lattice constraints in new geometry optimization driver
+
+- Dynamic polarizability and response kernel at finite frequencies
+
+- API call for CM5 charges
+
+- Numerical Hessian calculation can be split over multiple runs
+
+
+Changed
+-------
+
+- PLUMED simulations may deliver due to an incompatible change in version 2.8.0
+  of the external PLUMED library slightly different results as before. See also
+  the `change log of PLUMED 2.8
+  <https://www.plumed.org/doc-v2.8/user-doc/html/_c_h_a_n_g_e_s-2-8.html>`_.
+
+- Allow electric fields in periodic systems even when interactions
+  cross the sawtooth in the field
+
+- Allow printing of dipole moments, even in cases where the absolute
+  value is ill-defined (charged systems or periodic cases), but its
+  derivative may be meaningful.
+
+- Use the DFTB+ xyz writer for the modes program, removing the
+  XMakemol output option.
+
+- Re-enable q=0 (sawtooth) electric fields for periodic/helical structures
+
+
+Fixed
+-----
+
+- incorrect atomic mass unit for xTB calculations
+
+- electronic temperature read for Green's function solver
+
+- MPI code for spin polarised metallic perturbation at q=0 for spin
+  polarized molecules with processor groups
+
+
+21.2 (2021-12-13)
+=================
+
+Added
+-----
+
+- On-site potentials added
+
+- Support for extended tight binding (xTB) Hamiltonian via tblite library
+
+- DFTBPLUS_PARAM_DIR for searching Slater-Koster parameter files, solvation
+  parameter files, and xTB parameter files
+
+- Atomic potential responses (enables atom resolved response kernel evaluation
+  and condensed Fukui functions)
+
+- Internal changes for response evaluation for DFTB ground state hamiltonians
+  (except self-consistent dispersion) with molecular, periodic and helical
+  boundary conditions.
+
+- Stratmann solver for excited state, including range separated calculations
+
+- Rational function geometry optimization driver
+
+- ChIMES force field corrections of the repulsive potentials implemented
+
+- New geometry optimization drivers with coupled cartesian and lattice parameter
+  optimization
+
+
+Changed
+-------
+
+- Source tree reorganised to match the `Fortran package manager
+  <https://fpm.fortran-lang.org/>`_ preferred structure.
+
+- Updated parser version to 10.
+
+- Replace backend to implement DFT-D3 dispersion correction.
+  Use `s-dftd3 <https://github.com/awvwgk/simple-dftd3>`_ instead of
+  `dftd3-lib <https://github.com/dftbplus/dftd3-lib>`_.
+  Option ``WITH_DFTD3`` is removed and replaced with ``WITH_SDFTD3``.
+
+
+Fixed
+-----
+
+- CM5 correction added with incorrect sign to charge populations
+
+- External fields disabled for XLBOMD
+
+- self-consistent DFT-D4 uses populations instead of partial charges
+  in potential shift, energy expression and derivatives
+
+- Number of electrons for Fixed / spin-common Fermi energies and transport in
+  results.tag
+
+- D3(BJ)-ATM calculator was not being passed the exponent for ATM zero damping
+  calculations
+
+- LBFGS implementation fixed in new geometry optimization driver
+
+
+21.1 (2021-05-12)
+=================
+
+Added
+-----
+
+- Conductor like screening model (COSMO) implicit solvation model for SCC
+  calculations
+
+- Printout of cavity information as a cosmo file
+
+- Extended syntax for selecting atoms in HSD input
+
+- Static coupled perturbed response for homogeneous electric fields (evaluating
+  molecular electric polarisability)
+
+
+Changed
+-------
+
+- DFT-D4 can now be evaluated self-consistently within the SCC procedure
+
+- Self-consistent DFT-D4 with REKS
+
+- Upgraded to libMBD 0.12.1 (TS-forces are calculated analytically)
+
+
+Fixed
+-----
+
+- Fix bug in binary eigenvector output in non-MPI builds (only eigenvectors
+  belonging to the first k-point and spin channel were stored)
+
+- Fix transpose of lattice vectors on return from iPI (thanks to Bingqing Cheng
+  and Edgar Engel)
 
 
 20.2.1 (2020-12-07)
@@ -139,7 +467,7 @@ Changed
 - Poisson solver available without libNEGF enabled compilation
 
 - Parser input can now be set according to the code release version (20.1)
-  
+
 
 Fixed
 -----
